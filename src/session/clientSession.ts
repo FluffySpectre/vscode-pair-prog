@@ -218,7 +218,7 @@ export class ClientSession implements vscode.Disposable {
   private setupSync(): void {
     const wsFolder = vscode.workspace.workspaceFolders![0];
     const config = vscode.workspace.getConfiguration("pairprog");
-    const color = config.get<string>("highlightColor") || "#00BFFF";
+    const color = config.get<string>("highlightColor") || "#FF6B6B";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
     const sendFn = (msg: Message) => this.client.send(msg);

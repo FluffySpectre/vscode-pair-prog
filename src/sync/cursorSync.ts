@@ -118,10 +118,9 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     const uriStr = uri.toString();
     const name = this.remoteCursors?.username ?? this.remoteUsername ?? "Remote";
 
-    // "Being followed" badge: show 👁 on our own active file when the remote is following us
     if (this.remoteIsFollowing && this.localFileUri && uriStr === this.localFileUri.toString()) {
       return {
-        badge: "👁",
+        badge: "👀",
         tooltip: `${name} is following you`,
       };
     }
@@ -130,7 +129,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     if (this.remoteFileUri && uriStr === this.remoteFileUri.toString() && this.remoteCursors) {
       if (this.following) {
         return {
-          badge: "👁",
+          badge: "👀",
           tooltip: `Following ${name}`,
         };
       }
@@ -310,7 +309,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
       });
       editor.revealRange(targetRange, vscode.TextEditorRevealType.InCenter);
     } catch {
-      // File might not be available yet — ignore
+      // File might not be available yet - ignore
     } finally {
       // Release guard on next tick so the selection change event from
       // showTextDocument / revealRange is suppressed
@@ -355,7 +354,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
       .replace(/\\/g, "/");
 
     if (currentFilePath !== this.remoteCursors.filePath) {
-      // Remote cursor is in a different file — clear decorations
+      // Remote cursor is in a different file - clear decorations
       editor.setDecorations(this.cursorDecorationType, []);
       editor.setDecorations(this.lineHighlightDecorationType, []);
       editor.setDecorations(this.selectionDecorationType, []);

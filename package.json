@@ -58,7 +58,7 @@
         },
         "pairprog.highlightColor": {
           "type": "string",
-          "default": "#00BFFF",
+            "default": "#ec15ef",
           "description": "Color used for the remote partner's cursor and selection."
         },
         "pairprog.ignoredPatterns": {

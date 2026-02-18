@@ -42,7 +42,7 @@ Real-time peer-to-peer pair programming on a shared workspace.
 |---------------------------|---------------|--------------------------------------|
 | `pairprog.port`             | `9876`        | WebSocket server port                |
 | `pairprog.username`         | OS username   | Your display name                    |
-| `pairprog.highlightColor`   | `#00BFFF`     | Remote partner's cursor color        |
+| `pairprog.highlightColor`   | `#ec15ef`     | Remote partner's cursor color        |
 | `pairprog.ignoredPatterns`  | see below     | Glob patterns to exclude from sync   |
 
 Default ignored patterns:

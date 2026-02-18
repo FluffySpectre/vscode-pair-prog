@@ -172,7 +172,7 @@ export class HostSession implements vscode.Disposable {
     switch (msg.type) {
       case MessageType.Edit:
         if (this.documentSync) {
-          // Apply the client's edit on host's file — don't send it back,
+          // Apply the client's edit on host's file - don't send it back,
           // the client already applied it locally when the user typed it.
           await this.documentSync.handleRemoteEdit(msg.payload as EditPayload);
         }
@@ -227,7 +227,7 @@ export class HostSession implements vscode.Disposable {
   private setupSync(): void {
     const wsFolder = vscode.workspace.workspaceFolders![0];
     const config = vscode.workspace.getConfiguration("pairprog");
-    const color = config.get<string>("highlightColor") || "#00BFFF";
+    const color = config.get<string>("highlightColor") || "#ec15ef";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
     const sendFn = (msg: Message) => this.server.send(msg);

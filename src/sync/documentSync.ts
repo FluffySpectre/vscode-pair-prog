@@ -127,7 +127,7 @@ export class DocumentSync implements vscode.Disposable {
     try {
       doc = await vscode.workspace.openTextDocument(uri);
     } catch {
-      // File might not exist locally (client side) — skip
+      // File might not exist locally (client side) - skip
       return;
     }
 
@@ -142,7 +142,7 @@ export class DocumentSync implements vscode.Disposable {
       workspaceEdit.replace(uri, range, change.text);
     }
 
-    // Apply with guard to prevent echo — increment before, decrement on next tick
+    // Apply with guard to prevent echo - increment before, decrement on next tick
     this.remoteEditGuard++;
     try {
       await vscode.workspace.applyEdit(workspaceEdit);
@@ -180,7 +180,7 @@ export class DocumentSync implements vscode.Disposable {
     try {
       doc = await vscode.workspace.openTextDocument(uri);
     } catch {
-      // File doesn't exist on client — skip for now
+      // File doesn't exist on client - skip for now
       // (file ops sync handles creation)
       return;
     }
@@ -211,7 +211,7 @@ export class DocumentSync implements vscode.Disposable {
       const doc = await vscode.workspace.openTextDocument(uri);
       this.sendFullSync(payload.filePath, doc.getText());
     } catch {
-      // File doesn't exist on host — ignore
+      // File doesn't exist on host - ignore
     }
   }
 
@@ -243,7 +243,7 @@ export class DocumentSync implements vscode.Disposable {
     const shift = prior.text.length - prior.rangeLength;
 
     if (incoming.rangeOffset >= priorEnd) {
-      // Incoming is entirely after the prior change — shift offset
+      // Incoming is entirely after the prior change - shift offset
       return {
         ...incoming,
         rangeOffset: incoming.rangeOffset + shift,
@@ -251,11 +251,11 @@ export class DocumentSync implements vscode.Disposable {
     }
 
     if (incoming.rangeOffset + incoming.rangeLength <= prior.rangeOffset) {
-      // Incoming is entirely before — no change needed
+      // Incoming is entirely before - no change needed
       return incoming;
     }
 
-    // Overlapping edits — host wins, adjust incoming to apply after prior
+    // Overlapping edits - host wins, adjust incoming to apply after prior
     return {
       ...incoming,
       rangeOffset: priorEnd + shift,

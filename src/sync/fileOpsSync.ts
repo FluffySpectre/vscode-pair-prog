@@ -38,7 +38,7 @@ export class FileOpsSync implements vscode.Disposable {
 
   activate(): void {
     if (!this.isHost) {
-      // Client doesn't broadcast file ops — only receives them
+      // Client doesn't broadcast file ops - only receives them
       return;
     }
 
@@ -84,7 +84,7 @@ export class FileOpsSync implements vscode.Disposable {
       const doc = await vscode.workspace.openTextDocument(uri);
       content = doc.getText();
     } catch {
-      // Not a text file or unreadable — send empty content
+      // Not a text file or unreadable - send empty content
     }
 
     const payload: FileCreatedPayload = {
@@ -144,7 +144,7 @@ export class FileOpsSync implements vscode.Disposable {
     try {
       await vscode.workspace.fs.delete(uri, { recursive: false });
     } catch {
-      // File might not exist locally — that's fine
+      // File might not exist locally - that's fine
     } finally {
       this.isApplyingRemoteOp = false;
     }
@@ -158,7 +158,7 @@ export class FileOpsSync implements vscode.Disposable {
     try {
       await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
     } catch {
-      // Source might not exist locally — skip
+      // Source might not exist locally - skip
     } finally {
       this.isApplyingRemoteOp = false;
     }
@@ -198,13 +198,13 @@ export class FileOpsSync implements vscode.Disposable {
    *  - `*.ext` matches files with a given extension
    */
   private simpleGlobMatch(pattern: string, filePath: string): boolean {
-    // Handle "dir/**" — matches anything under that directory
+    // Handle "dir/**" - matches anything under that directory
     if (pattern.endsWith("/**")) {
       const prefix = pattern.slice(0, -3);
       return filePath.startsWith(prefix + "/") || filePath === prefix;
     }
 
-    // Handle "*.ext" — matches files ending with that extension
+    // Handle "*.ext" - matches files ending with that extension
     if (pattern.startsWith("*.")) {
       const ext = pattern.slice(1); // e.g., ".lock"
       return filePath.endsWith(ext);

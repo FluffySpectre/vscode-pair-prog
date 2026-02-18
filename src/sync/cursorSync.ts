@@ -18,11 +18,14 @@ export class CursorSync implements vscode.Disposable {
   private cursorDecorationType: vscode.TextEditorDecorationType;
   private lineHighlightDecorationType: vscode.TextEditorDecorationType;
   private selectionDecorationType: vscode.TextEditorDecorationType;
+  private usernameLabelDecorationType: vscode.TextEditorDecorationType;
 
   private remoteCursors: CursorUpdatePayload | null = null;
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DEBOUNCE_MS = 50;
+
+  private highlightColor: string;
 
   constructor(
     sendFn: (msg: Message) => void,
@@ -31,6 +34,7 @@ export class CursorSync implements vscode.Disposable {
   ) {
     this.sendFn = sendFn;
     this.username = username;
+    this.highlightColor = highlightColor;
 
     // Cursor marker
     this.cursorDecorationType = vscode.window.createTextEditorDecorationType({
@@ -51,6 +55,19 @@ export class CursorSync implements vscode.Disposable {
     this.selectionDecorationType = vscode.window.createTextEditorDecorationType({
       backgroundColor: highlightColor + "33",
       borderRadius: "2px",
+    });
+
+    // Username label pinned to the right edge of the editor viewport
+    this.usernameLabelDecorationType = vscode.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      after: {
+        color: new vscode.ThemeColor("editor.background"),
+        backgroundColor: highlightColor,
+        fontStyle: "normal",
+        fontWeight: "bold",
+        margin: "0 0 0 1em",
+        textDecoration: "none; position: sticky; float: right; padding: 0 6px; border-radius: 3px; font-size: 0.85em;",
+      },
     });
   }
 
@@ -163,12 +180,14 @@ export class CursorSync implements vscode.Disposable {
       editor.setDecorations(this.cursorDecorationType, []);
       editor.setDecorations(this.lineHighlightDecorationType, []);
       editor.setDecorations(this.selectionDecorationType, []);
+      editor.setDecorations(this.usernameLabelDecorationType, []);
       return;
     }
 
     const cursorDecorations: vscode.DecorationOptions[] = [];
     const lineHighlightDecorations: vscode.DecorationOptions[] = [];
     const selectionDecorations: vscode.DecorationOptions[] = [];
+    const usernameLabelDecorations: vscode.DecorationOptions[] = [];
 
     for (const cursor of this.remoteCursors.cursors) {
       // Cursor position decoration
@@ -185,6 +204,16 @@ export class CursorSync implements vscode.Disposable {
       const lineRange = editor.document.lineAt(cursor.position.line).range;
       lineHighlightDecorations.push({
         range: lineRange,
+      });
+
+      // Username label pinned to the right edge of the line
+      usernameLabelDecorations.push({
+        range: lineRange,
+        renderOptions: {
+          after: {
+            contentText: this.remoteCursors.username,
+          },
+        },
       });
 
       // Selection decoration
@@ -206,6 +235,7 @@ export class CursorSync implements vscode.Disposable {
     editor.setDecorations(this.cursorDecorationType, cursorDecorations);
     editor.setDecorations(this.lineHighlightDecorationType, lineHighlightDecorations);
     editor.setDecorations(this.selectionDecorationType, selectionDecorations);
+    editor.setDecorations(this.usernameLabelDecorationType, usernameLabelDecorations);
   }
 
   // Clear
@@ -217,6 +247,7 @@ export class CursorSync implements vscode.Disposable {
       editor.setDecorations(this.cursorDecorationType, []);
       editor.setDecorations(this.lineHighlightDecorationType, []);
       editor.setDecorations(this.selectionDecorationType, []);
+      editor.setDecorations(this.usernameLabelDecorationType, []);
     }
   }
 
@@ -230,6 +261,7 @@ export class CursorSync implements vscode.Disposable {
     this.cursorDecorationType.dispose();
     this.lineHighlightDecorationType.dispose();
     this.selectionDecorationType.dispose();
+    this.usernameLabelDecorationType.dispose();
     this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
   }

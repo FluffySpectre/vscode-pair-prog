@@ -1,7 +1,8 @@
 {
   "name": "vscode-collab",
-  "displayName": "Workspace Collaboration",
+  "displayName": "VSCode Collab",
   "description": "Real-time collaboration on a shared workspace over LAN. One host, one client",
+  "icon": "icon.png",
   "version": "1.0.0",
   "publisher": "bjoernbosse",
   "engines": {

@@ -9,19 +9,20 @@ export enum ConnectionState {
 }
 
 /**
- * Manages the status bar item that shows the current collaboration state.
+ * Manages the status bar item that shows the current state.
  */
 export class StatusBar implements vscode.Disposable {
   private item: vscode.StatusBarItem;
   private state: ConnectionState = ConnectionState.Idle;
   private address: string = "";
+  private peerName: string = "";
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       100
     );
-    this.item.command = "collab.statusBarClicked";
+    this.item.command = "pairprog.statusBarClicked";
     this.hide();
   }
 
@@ -31,7 +32,7 @@ export class StatusBar implements vscode.Disposable {
     this.state = ConnectionState.Hosting;
     this.address = address;
     this.item.text = `$(broadcast) Hosting: ${address}`;
-    this.item.tooltip = `Collaboration session active.\nWaiting for client to connect.\nClick to copy address or stop.`;
+    this.item.tooltip = `Pair Programming session active.\nWaiting for client to connect.\nClick to copy address or stop.`;
     this.item.backgroundColor = undefined;
     this.item.show();
   }
@@ -39,8 +40,9 @@ export class StatusBar implements vscode.Disposable {
   setHostConnected(address: string, clientName: string): void {
     this.state = ConnectionState.Hosting;
     this.address = address;
+    this.peerName = clientName;
     this.item.text = `$(broadcast) Hosting: ${clientName} connected`;
-    this.item.tooltip = `Collaborating with ${clientName}.\nSession address: ${address}\nClick for options.`;
+    this.item.tooltip = `Pair Programming with ${clientName}.\nSession address: ${address}\nClick for options.`;
     this.item.backgroundColor = undefined;
     this.item.show();
   }
@@ -48,10 +50,24 @@ export class StatusBar implements vscode.Disposable {
   setConnected(address: string, hostName: string): void {
     this.state = ConnectionState.Connected;
     this.address = address;
+    this.peerName = hostName;
     this.item.text = `$(plug) Connected to ${hostName}`;
-    this.item.tooltip = `Connected to ${address}.\nCollaborating with ${hostName}.\nClick for options.`;
+    this.item.tooltip = `Connected to ${address}.\nPair Programming with ${hostName}.\nClick for options.`;
     this.item.backgroundColor = undefined;
     this.item.show();
+  }
+
+  setFollowing(following: boolean): void {
+    if (following) {
+      this.item.text = `$(eye) Following ${this.peerName}`;
+      this.item.tooltip = `Following ${this.peerName}'s cursor.\nClick for options.`;
+    } else if (this.state === ConnectionState.Hosting) {
+      this.item.text = `$(broadcast) Hosting: ${this.peerName} connected`;
+      this.item.tooltip = `Pair Programming with ${this.peerName}.\nSession address: ${this.address}\nClick for options.`;
+    } else if (this.state === ConnectionState.Connected) {
+      this.item.text = `$(plug) Connected to ${this.peerName}`;
+      this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.peerName}.\nClick for options.`;
+    }
   }
 
   setReconnecting(attempt: number): void {
@@ -67,7 +83,7 @@ export class StatusBar implements vscode.Disposable {
   setDisconnected(): void {
     this.state = ConnectionState.Disconnected;
     this.item.text = `$(debug-disconnect) Disconnected`;
-    this.item.tooltip = "Collaboration session ended.";
+    this.item.tooltip = "Pair Programming session ended.";
     this.item.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.errorBackground"
     );

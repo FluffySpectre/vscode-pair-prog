@@ -1,20 +1,20 @@
-# vscode-collab
+# vscode-pair-prog
 
-Real-time collaborative editing over LAN. One person hosts, the other connects. Edits persist only on the host's files.
+Real-time peer-to-peer pair programming on a shared workspace.
 
 ## Quick Start
 
 ### Host a Session
 
 1. Open a workspace (e.g., a git repo)
-2. Run command: **Collab: Start Hosting Session** (`Ctrl+Shift+P`)
+2. Run command: **PairProg: Start Hosting Session** (`Ctrl+Shift+P`)
 3. Copy the displayed address (e.g., `192.168.1.5:9876`)
-4. Share the address with your collaborator
+4. Share the address with your partner
 
 ### Join a Session
 
 1. Open the **same workspace** (same repo, same branch)
-2. Run command: **Collab: Join Session**
+2. Run command: **PairProg: Join Session**
 3. Enter the host's address
 4. You're connected — edits sync in real-time. Wohooo!
 
@@ -40,10 +40,10 @@ Real-time collaborative editing over LAN. One person hosts, the other connects. 
 
 | Setting                   | Default       | Description                          |
 |---------------------------|---------------|--------------------------------------|
-| `collab.port`             | `9876`        | WebSocket server port                |
-| `collab.username`         | OS username   | Your display name                    |
-| `collab.highlightColor`   | `#00BFFF`     | Remote collaborator's cursor color   |
-| `collab.ignoredPatterns`  | see below     | Glob patterns to exclude from sync   |
+| `pairprog.port`             | `9876`        | WebSocket server port                |
+| `pairprog.username`         | OS username   | Your display name                    |
+| `pairprog.highlightColor`   | `#00BFFF`     | Remote partner's cursor color        |
+| `pairprog.ignoredPatterns`  | see below     | Glob patterns to exclude from sync   |
 
 Default ignored patterns:
 ```json
@@ -54,10 +54,10 @@ Default ignored patterns:
 
 | Command                          | Description                    |
 |----------------------------------|--------------------------------|
-| `Collab: Start Hosting Session`  | Start a WebSocket server       |
-| `Collab: Stop Hosting Session`   | Stop hosting and disconnect    |
-| `Collab: Join Session`           | Connect to a host              |
-| `Collab: Leave Session`          | Disconnect from host           |
+| `PairProg: Start Hosting Session`  | Start a WebSocket server       |
+| `PairProg: Stop Hosting Session`   | Stop hosting and disconnect    |
+| `PairProg: Join Session`           | Connect to a host              |
+| `PairProg: Leave Session`          | Disconnect from host           |
 
 Click the status bar item for a quick-pick menu with these options.
 
@@ -66,7 +66,7 @@ Click the status bar item for a quick-pick menu with these options.
 ### Setup
 
 ```bash
-cd vscode-collab
+cd vscode-pair-prog
 npm install
 npm run compile
 ```

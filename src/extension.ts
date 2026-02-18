@@ -10,7 +10,7 @@ let statusBar: StatusBar;
 // Activate
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log("[Collab] Extension activated");
+  console.log("[PairProg] Extension activated");
 
   statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Start Hosting
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("collab.startSession", async () => {
+    vscode.commands.registerCommand("pairprog.startSession", async () => {
       if (hostSession?.isActive) {
         vscode.window.showWarningMessage(
           "A hosting session is already active."
@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (!vscode.workspace.workspaceFolders?.length) {
         vscode.window.showErrorMessage(
-          "Open a workspace folder before starting a collaboration session."
+          "Open a workspace folder before starting a pair programming session."
         );
         return;
       }
@@ -56,7 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Stop Hosting
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("collab.stopSession", () => {
+    vscode.commands.registerCommand("pairprog.stopSession", () => {
       if (!hostSession?.isActive) {
         vscode.window.showWarningMessage("No active hosting session to stop.");
         return;
@@ -70,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Join Session
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("collab.joinSession", async () => {
+    vscode.commands.registerCommand("pairprog.joinSession", async () => {
       if (clientSession?.isActive) {
         vscode.window.showWarningMessage(
           "Already connected to a session. Leave it first."
@@ -87,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (!vscode.workspace.workspaceFolders?.length) {
         vscode.window.showErrorMessage(
-          "Open a workspace folder before joining a collaboration session."
+          "Open a workspace folder before joining a pair programming session."
         );
         return;
       }
@@ -126,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Leave Session
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("collab.leaveSession", () => {
+    vscode.commands.registerCommand("pairprog.leaveSession", () => {
       if (!clientSession?.isActive) {
         vscode.window.showWarningMessage("No active session to leave.");
         return;
@@ -137,19 +137,35 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Toggle Follow Mode
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.toggleFollowMode", () => {
+      if (hostSession?.isActive) {
+        hostSession.toggleFollowMode();
+      } else if (clientSession?.isActive) {
+        clientSession.toggleFollowMode();
+      } else {
+        vscode.window.showWarningMessage("No active pair programming session.");
+      }
+    })
+  );
+
   // Status Bar Click
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("collab.statusBarClicked", async () => {
+    vscode.commands.registerCommand("pairprog.statusBarClicked", async () => {
       const items: vscode.QuickPickItem[] = [];
 
       if (hostSession?.isActive) {
         items.push(
+          { label: "$(eye) Toggle Follow Mode", description: "" },
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(debug-stop) Stop Hosting", description: "" }
         );
       } else if (clientSession?.isActive) {
         items.push(
+          { label: "$(eye) Toggle Follow Mode", description: "" },
           { label: "$(debug-disconnect) Disconnect", description: "" }
         );
       } else {
@@ -160,22 +176,24 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: "Collaboration Session",
+        placeHolder: "Pair Programming Session",
       });
 
       if (!picked) { return; }
 
-      if (picked.label.includes("Copy Session Address")) {
+      if (picked.label.includes("Toggle Follow Mode")) {
+        vscode.commands.executeCommand("pairprog.toggleFollowMode");
+      } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");
       } else if (picked.label.includes("Stop Hosting")) {
-        vscode.commands.executeCommand("collab.stopSession");
+        vscode.commands.executeCommand("pairprog.stopSession");
       } else if (picked.label.includes("Disconnect")) {
-        vscode.commands.executeCommand("collab.leaveSession");
+        vscode.commands.executeCommand("pairprog.leaveSession");
       } else if (picked.label.includes("Start Hosting")) {
-        vscode.commands.executeCommand("collab.startSession");
+        vscode.commands.executeCommand("pairprog.startSession");
       } else if (picked.label.includes("Join Session")) {
-        vscode.commands.executeCommand("collab.joinSession");
+        vscode.commands.executeCommand("pairprog.joinSession");
       }
     })
   );

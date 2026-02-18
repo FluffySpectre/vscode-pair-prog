@@ -1,9 +1,9 @@
 {
-  "name": "vscode-collab",
-  "displayName": "VSCode Collab",
-  "description": "Real-time collaboration on a shared workspace over LAN. One host, one client",
+  "name": "vscode-pair-prog",
+  "displayName": "VSCode Pair Prog",
+  "description": "Real-time peer-to-peer pair programming on a shared workspace.",
   "icon": "icon.png",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "bjoernbosse",
   "engines": {
     "vscode": "^1.109.0"
@@ -15,41 +15,45 @@
   "contributes": {
     "commands": [
       {
-        "command": "collab.startSession",
-        "title": "Collab: Start Hosting Session"
+        "command": "pairprog.startSession",
+        "title": "PairProg: Start Hosting Session"
       },
       {
-        "command": "collab.stopSession",
-        "title": "Collab: Stop Hosting Session"
+        "command": "pairprog.stopSession",
+        "title": "PairProg: Stop Hosting Session"
       },
       {
-        "command": "collab.joinSession",
-        "title": "Collab: Join Session"
+        "command": "pairprog.joinSession",
+        "title": "PairProg: Join Session"
       },
       {
-        "command": "collab.leaveSession",
-        "title": "Collab: Leave Session"
+        "command": "pairprog.leaveSession",
+        "title": "PairProg: Leave Session"
+      },
+      {
+        "command": "pairprog.toggleFollowMode",
+        "title": "PairProg: Toggle Follow Mode"
       }
     ],
     "configuration": {
-      "title": "Workspace Collaboration",
+      "title": "PairProg Configuration",
       "properties": {
-        "collab.port": {
+        "pairprog.port": {
           "type": "number",
           "default": 9876,
           "description": "Port for the WebSocket server."
         },
-        "collab.username": {
+        "pairprog.username": {
           "type": "string",
           "default": "",
           "description": "Your display name."
         },
-        "collab.highlightColor": {
+        "pairprog.highlightColor": {
           "type": "string",
           "default": "#00BFFF",
-          "description": "Color used for the remote collaborator's cursor and selection."
+          "description": "Color used for the remote partner's cursor and selection."
         },
-        "collab.ignoredPatterns": {
+        "pairprog.ignoredPatterns": {
           "type": "array",
           "default": [
             "node_modules/**",

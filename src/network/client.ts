@@ -18,7 +18,7 @@ export interface ClientEvents {
   error: (err: Error) => void;
 }
 
-export class CollabClient extends EventEmitter {
+export class PairProgClient extends EventEmitter {
   private socket: ws.WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;

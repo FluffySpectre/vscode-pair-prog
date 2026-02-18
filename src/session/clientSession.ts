@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CollabClient } from "../network/client";
+import { PairProgClient } from "../network/client";
 import {
   Message,
   MessageType,
@@ -8,6 +8,7 @@ import {
   EditPayload,
   FullSyncPayload,
   CursorUpdatePayload,
+  FollowUpdatePayload,
   FileCreatedPayload,
   FileDeletedPayload,
   FileRenamedPayload,
@@ -26,7 +27,7 @@ import { StatusBar } from "../ui/statusBar";
  *  4. Relays local edits to host and applies confirmed edits from host
  */
 export class ClientSession implements vscode.Disposable {
-  private client: CollabClient;
+  private client: PairProgClient;
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
@@ -39,9 +40,9 @@ export class ClientSession implements vscode.Disposable {
 
   constructor(statusBar: StatusBar) {
     this.statusBar = statusBar;
-    this.client = new CollabClient();
+    this.client = new PairProgClient();
 
-    const config = vscode.workspace.getConfiguration("collab");
+    const config = vscode.workspace.getConfiguration("pairprog");
     this.username = config.get<string>("username") || this.getDefaultUsername();
   }
 
@@ -73,7 +74,7 @@ export class ClientSession implements vscode.Disposable {
     this.teardownSync();
     this.client.disconnect();
     this.statusBar.setDisconnected();
-    vscode.window.showInformationMessage("Disconnected from collaboration session.");
+    vscode.window.showInformationMessage("Disconnected from pair programming session.");
   }
 
   // Client Events
@@ -96,8 +97,8 @@ export class ClientSession implements vscode.Disposable {
     });
 
     this.client.on("error", (err: Error) => {
-      console.error("[Collab Client] Error:", err.message);
-      vscode.window.showErrorMessage(`Collaboration error: ${err.message}`);
+      console.error("[Pair Prog Client] Error:", err.message);
+      vscode.window.showErrorMessage(`Pair Programming error: ${err.message}`);
     });
   }
 
@@ -124,7 +125,7 @@ export class ClientSession implements vscode.Disposable {
     this.teardownSync();
     this.statusBar.setDisconnected();
     vscode.window.showWarningMessage(
-      "Disconnected from collaboration session."
+      "Disconnected from pair programming session."
     );
   }
 
@@ -150,6 +151,14 @@ export class ClientSession implements vscode.Disposable {
         if (this.cursorSync) {
           this.cursorSync.handleRemoteCursorUpdate(
             msg.payload as CursorUpdatePayload
+          );
+        }
+        break;
+
+      case MessageType.FollowUpdate:
+        if (this.cursorSync) {
+          this.cursorSync.handleRemoteFollowUpdate(
+            msg.payload as FollowUpdatePayload
           );
         }
         break;
@@ -187,7 +196,7 @@ export class ClientSession implements vscode.Disposable {
 
   private setupSync(): void {
     const wsFolder = vscode.workspace.workspaceFolders![0];
-    const config = vscode.workspace.getConfiguration("collab");
+    const config = vscode.workspace.getConfiguration("pairprog");
     const color = config.get<string>("highlightColor") || "#00BFFF";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
@@ -198,6 +207,10 @@ export class ClientSession implements vscode.Disposable {
 
     this.cursorSync = new CursorSync(sendFn, this.username, color);
     this.cursorSync.activate();
+
+    this.cursorSync.onDidChangeFollowMode((following) => {
+      this.statusBar.setFollowing(following);
+    });
 
     this.fileOpsSync = new FileOpsSync(
       sendFn,
@@ -223,6 +236,11 @@ export class ClientSession implements vscode.Disposable {
 
   private getDefaultUsername(): string {
     return require("os").userInfo().username || "Client";
+  }
+
+  toggleFollowMode(): void {
+    if (!this.cursorSync) { return; }
+    this.cursorSync.toggleFollow();
   }
 
   get isActive(): boolean {

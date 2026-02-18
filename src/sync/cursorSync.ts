@@ -3,12 +3,13 @@ import {
   Message,
   MessageType,
   CursorUpdatePayload,
+  FollowUpdatePayload,
   createMessage,
 } from "../network/protocol";
 
 /**
  * CursorSync broadcasts local cursor/selection changes and renders
- * remote collaborator cursors as decorations in the editor.
+ * remote partner cursors as decorations in the editor.
  */
 export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvider {
   private disposables: vscode.Disposable[] = [];
@@ -22,12 +23,20 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
 
   private remoteCursors: CursorUpdatePayload | null = null;
   private remoteFileUri: vscode.Uri | null = null;
-  private previousRemoteFileUri: vscode.Uri | null = null;
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DEBOUNCE_MS = 50;
 
   private highlightColor: string;
+
+  // Follow mode
+  private following = false;
+  private remoteIsFollowing = false;
+  private followActionGuard = false;
+  private remoteUsername: string | null = null;
+
+  private readonly _onDidChangeFollowMode = new vscode.EventEmitter<boolean>();
+  readonly onDidChangeFollowMode = this._onDidChangeFollowMode.event;
 
   private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<vscode.Uri | vscode.Uri[]>();
   readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
@@ -111,6 +120,16 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
 
     const name = this.remoteCursors.username;
 
+    if (this.following || this.remoteIsFollowing) {
+      const tooltip = this.following
+        ? `Following ${name}`
+        : `${name} is following you`;
+      return {
+        badge: "👁",
+        tooltip,
+      };
+    }
+
     return {
       badge: "👤",
       tooltip: `${name} is editing this file`,
@@ -127,6 +146,16 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   }
 
   private onLocalSelectionChange(e: vscode.TextEditorSelectionChangeEvent): void {
+    // Auto-disable follow mode on user-initiated cursor movement
+    if (this.following && !this.followActionGuard) {
+      const isUserAction =
+        e.kind === vscode.TextEditorSelectionChangeKind.Keyboard ||
+        e.kind === vscode.TextEditorSelectionChangeKind.Mouse;
+      if (isUserAction) {
+        this.setFollowing(false);
+      }
+    }
+
     // Debounce to avoid flooding the network
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -185,8 +214,82 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
 
   handleRemoteCursorUpdate(payload: CursorUpdatePayload): void {
     this.remoteCursors = payload;
+    this.remoteUsername = payload.username;
     this.applyRemoteDecorations();
     this.updateFileTabDecoration(payload.filePath);
+
+    if (this.following) {
+      this.followRemoteCursor(payload);
+    }
+  }
+
+  // Follow Mode
+
+  toggleFollow(): boolean {
+    this.setFollowing(!this.following);
+    return this.following;
+  }
+
+  isFollowing(): boolean {
+    return this.following;
+  }
+
+  getRemoteUsername(): string | null {
+    return this.remoteUsername;
+  }
+
+  private setFollowing(value: boolean): void {
+    if (this.following === value) { return; }
+    this.following = value;
+    this._onDidChangeFollowMode.fire(value);
+
+    // Tell the remote side that we started/stopped following them
+    const payload: FollowUpdatePayload = {
+      following: value,
+      username: this.username,
+    };
+    this.sendFn(createMessage(MessageType.FollowUpdate, payload));
+
+    // Refresh the tab badge so it switches between 👤 and 👁
+    if (this.remoteFileUri) {
+      this._onDidChangeFileDecorations.fire([this.remoteFileUri]);
+    }
+  }
+
+  handleRemoteFollowUpdate(payload: FollowUpdatePayload): void {
+    this.remoteIsFollowing = payload.following;
+
+    // Refresh tab badge to reflect that the remote user is now following us
+    if (this.remoteFileUri) {
+      this._onDidChangeFileDecorations.fire([this.remoteFileUri]);
+    }
+  }
+
+  private async followRemoteCursor(payload: CursorUpdatePayload): Promise<void> {
+    const wsFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!wsFolder || payload.cursors.length === 0) { return; }
+
+    const targetUri = vscode.Uri.joinPath(wsFolder.uri, payload.filePath);
+    const cursor = payload.cursors[0];
+    const targetPos = new vscode.Position(cursor.position.line, cursor.position.character);
+    const targetRange = new vscode.Range(targetPos, targetPos);
+
+    this.followActionGuard = true;
+    try {
+      const editor = await vscode.window.showTextDocument(targetUri, {
+        preview: false,
+        preserveFocus: false,
+      });
+      editor.revealRange(targetRange, vscode.TextEditorRevealType.InCenter);
+    } catch {
+      // File might not be available yet — ignore
+    } finally {
+      // Release guard on next tick so the selection change event from
+      // showTextDocument / revealRange is suppressed
+      setTimeout(() => {
+        this.followActionGuard = false;
+      }, 0);
+    }
   }
 
   private updateFileTabDecoration(relativePath: string): void {
@@ -196,12 +299,11 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     const newUri = vscode.Uri.joinPath(wsFolder.uri, relativePath);
     const urisToRefresh: vscode.Uri[] = [];
 
-    // Clear decoration from previous file if the remote user moved to a different file
-    if (this.previousRemoteFileUri && this.previousRemoteFileUri.toString() !== newUri.toString()) {
-      urisToRefresh.push(this.previousRemoteFileUri);
+    // Clear decoration from the old file so the badge is removed
+    if (this.remoteFileUri && this.remoteFileUri.toString() !== newUri.toString()) {
+      urisToRefresh.push(this.remoteFileUri);
     }
 
-    this.previousRemoteFileUri = this.remoteFileUri;
     this.remoteFileUri = newUri;
     urisToRefresh.push(newUri);
 
@@ -290,14 +392,17 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   // Clear
 
   clearDecorations(): void {
+    // Disable follow mode
+    this.setFollowing(false);
+
     // Clear tab decoration for the remote file
     const urisToRefresh: vscode.Uri[] = [];
     if (this.remoteFileUri) { urisToRefresh.push(this.remoteFileUri); }
-    if (this.previousRemoteFileUri) { urisToRefresh.push(this.previousRemoteFileUri); }
 
     this.remoteCursors = null;
     this.remoteFileUri = null;
-    this.previousRemoteFileUri = null;
+    this.remoteUsername = null;
+    this.remoteIsFollowing = false;
 
     if (urisToRefresh.length > 0) {
       this._onDidChangeFileDecorations.fire(urisToRefresh);
@@ -323,6 +428,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     this.lineHighlightDecorationType.dispose();
     this.selectionDecorationType.dispose();
     this.usernameLabelDecorationType.dispose();
+    this._onDidChangeFollowMode.dispose();
     this._onDidChangeFileDecorations.dispose();
     this.disposables.forEach((d) => d.dispose());
     this.disposables = [];

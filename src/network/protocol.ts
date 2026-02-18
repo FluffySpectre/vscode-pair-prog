@@ -12,6 +12,7 @@ export enum MessageType {
 
   // Cursor sync
   CursorUpdate = "cursorUpdate",
+  FollowUpdate = "followUpdate",
 
   // File operations
   FileCreated = "fileCreated",
@@ -84,6 +85,11 @@ export interface CursorUpdatePayload {
       end: CursorPosition;
     };
   }>;
+}
+
+export interface FollowUpdatePayload {
+  following: boolean;
+  username: string;
 }
 
 export interface FileCreatedPayload {

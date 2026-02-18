@@ -17,7 +17,7 @@ export interface ServerEvents {
   error: (err: Error) => void;
 }
 
-export class CollabServer extends EventEmitter {
+export class PairProgServer extends EventEmitter {
   private server: ws.Server | null = null;
   private client: ws.WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;

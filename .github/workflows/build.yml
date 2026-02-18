@@ -31,5 +31,5 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vscode-collab-${{ github.sha }}
+          name: vscode-pair-prog-${{ github.sha }}
           path: "*.vsix"

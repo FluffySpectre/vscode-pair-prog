@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CollabServer } from "../network/server";
+import { PairProgServer } from "../network/server";
 import {
   Message,
   MessageType,
@@ -7,6 +7,7 @@ import {
   WelcomePayload,
   EditPayload,
   CursorUpdatePayload,
+  FollowUpdatePayload,
   OpenFilePayload,
   createMessage,
 } from "../network/protocol";
@@ -23,7 +24,7 @@ import { StatusBar } from "../ui/statusBar";
  *  4. Relays edits, cursors, and file operations
  */
 export class HostSession implements vscode.Disposable {
-  private server: CollabServer;
+  private server: PairProgServer;
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
@@ -37,16 +38,16 @@ export class HostSession implements vscode.Disposable {
 
   constructor(statusBar: StatusBar) {
     this.statusBar = statusBar;
-    this.server = new CollabServer();
+    this.server = new PairProgServer();
 
-    const config = vscode.workspace.getConfiguration("collab");
+    const config = vscode.workspace.getConfiguration("pairprog");
     this.username = config.get<string>("username") || this.getDefaultUsername();
   }
 
   // Start
 
   async start(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("collab");
+    const config = vscode.workspace.getConfiguration("pairprog");
     const port = config.get<number>("port") || 9876;
 
     // Start the server
@@ -54,7 +55,7 @@ export class HostSession implements vscode.Disposable {
     this.statusBar.setHosting(this.address);
 
     vscode.window.showInformationMessage(
-      `Collaboration session started on ${this.address}`,
+      `Pair Programming session started on ${this.address}`,
       "Copy Address"
     ).then((action) => {
       if (action === "Copy Address") {
@@ -76,7 +77,7 @@ export class HostSession implements vscode.Disposable {
     });
 
     this.server.on("error", (err: Error) => {
-      console.error("[Collab Host] Error:", err.message);
+      console.error("[Pair Prog Host] Error:", err.message);
     });
   }
 
@@ -87,7 +88,7 @@ export class HostSession implements vscode.Disposable {
     this.teardownSync();
     this.server.stop();
     this.statusBar.setDisconnected();
-    vscode.window.showInformationMessage("Collaboration session stopped.");
+    vscode.window.showInformationMessage("Pair Programming session stopped.");
   }
 
   // Client Connected
@@ -179,6 +180,14 @@ export class HostSession implements vscode.Disposable {
         }
         break;
 
+      case MessageType.FollowUpdate:
+        if (this.cursorSync) {
+          this.cursorSync.handleRemoteFollowUpdate(
+            msg.payload as FollowUpdatePayload
+          );
+        }
+        break;
+
       case MessageType.OpenFile:
         if (this.documentSync) {
           await this.documentSync.handleOpenFileRequest(
@@ -196,7 +205,7 @@ export class HostSession implements vscode.Disposable {
 
   private setupSync(): void {
     const wsFolder = vscode.workspace.workspaceFolders![0];
-    const config = vscode.workspace.getConfiguration("collab");
+    const config = vscode.workspace.getConfiguration("pairprog");
     const color = config.get<string>("highlightColor") || "#00BFFF";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
@@ -207,6 +216,10 @@ export class HostSession implements vscode.Disposable {
 
     this.cursorSync = new CursorSync(sendFn, this.username, color);
     this.cursorSync.activate();
+
+    this.cursorSync.onDidChangeFollowMode((following) => {
+      this.statusBar.setFollowing(following);
+    });
 
     this.fileOpsSync = new FileOpsSync(
       sendFn,
@@ -253,6 +266,11 @@ export class HostSession implements vscode.Disposable {
 
   private getDefaultUsername(): string {
     return require("os").userInfo().username || "Host";
+  }
+
+  toggleFollowMode(): void {
+    if (!this.cursorSync) { return; }
+    this.cursorSync.toggleFollow();
   }
 
   get isActive(): boolean {

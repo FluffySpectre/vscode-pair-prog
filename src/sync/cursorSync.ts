@@ -6,6 +6,7 @@ import {
   FollowUpdatePayload,
   createMessage,
 } from "../network/protocol";
+import { toRelativePath } from "../utils/pathUtils";
 
 /**
  * CursorSync broadcasts local cursor/selection changes and renders
@@ -177,16 +178,8 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
       return;
     }
 
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) { return; }
-
-    const rootPath = wsFolder.uri.fsPath;
-    const filePath = editor.document.uri.fsPath;
-    if (!filePath.startsWith(rootPath)) { return; }
-
-    const relativePath = filePath
-      .slice(rootPath.length + 1)
-      .replace(/\\/g, "/");
+    const relativePath = toRelativePath(editor.document.uri);
+    if (!relativePath) { return; }
 
     // Track our own active file so we can show the "being followed" badge on it
     this.updateLocalFileUri(editor.document.uri);
@@ -346,13 +339,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     }
 
     // Check if this editor shows the same file as the remote cursor
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) { return; }
-
-    const currentFilePath = editor.document.uri.fsPath
-      .slice(wsFolder.uri.fsPath.length + 1)
-      .replace(/\\/g, "/");
-
+    const currentFilePath = toRelativePath(editor.document.uri);
     if (currentFilePath !== this.remoteCursors.filePath) {
       // Remote cursor is in a different file - clear decorations
       editor.setDecorations(this.cursorDecorationType, []);

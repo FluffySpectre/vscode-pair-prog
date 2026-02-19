@@ -6,6 +6,7 @@ import {
   FileSavedPayload,
   createMessage,
 } from "../network/protocol";
+import { toRelativePath, toAbsoluteUri } from "../utils/pathUtils";
 
 /**
  * DocumentSync handles file save delegation.
@@ -17,16 +18,10 @@ export class DocumentSync implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
-  private workspaceRoot: string;
 
-  constructor(
-    sendFn: (msg: Message) => void,
-    isHost: boolean,
-    workspaceRoot: string
-  ) {
+  constructor(sendFn: (msg: Message) => void, isHost: boolean) {
     this.sendFn = sendFn;
     this.isHost = isHost;
-    this.workspaceRoot = workspaceRoot;
   }
 
   activate(): void {
@@ -37,7 +32,7 @@ export class DocumentSync implements vscode.Disposable {
           if (e.document.uri.scheme !== "file") {
             return;
           }
-          const filePath = this.toRelativePath(e.document.uri);
+          const filePath = toRelativePath(e.document.uri);
           if (!filePath) {
             return;
           }
@@ -61,7 +56,7 @@ export class DocumentSync implements vscode.Disposable {
   // Host: client requested a file save
 
   async handleFileSaveRequest(payload: FileSaveRequestPayload): Promise<void> {
-    const uri = this.toAbsoluteUri(payload.filePath);
+    const uri = toAbsoluteUri(payload.filePath);
     try {
       const doc = await vscode.workspace.openTextDocument(uri);
       await doc.save();
@@ -78,35 +73,12 @@ export class DocumentSync implements vscode.Disposable {
   // Client: host confirmed the file was saved
 
   async handleFileSaved(payload: FileSavedPayload): Promise<void> {
-    const uri = this.toAbsoluteUri(payload.filePath);
+    const uri = toAbsoluteUri(payload.filePath);
     try {
       await vscode.commands.executeCommand("workbench.action.files.revert", uri);
     } catch {
       // Ignore if revert fails
     }
-  }
-
-  // Path Utilities
-
-  private toRelativePath(uri: vscode.Uri): string | null {
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) {
-      return null;
-    }
-
-    const rootPath = wsFolder.uri.fsPath;
-    const filePath = uri.fsPath;
-
-    if (!filePath.startsWith(rootPath)) {
-      return null;
-    }
-
-    return filePath.slice(rootPath.length + 1).replace(/\\/g, "/");
-  }
-
-  toAbsoluteUri(relativePath: string): vscode.Uri {
-    const wsFolder = vscode.workspace.workspaceFolders![0];
-    return vscode.Uri.joinPath(wsFolder.uri, relativePath);
   }
 
   dispose(): void {

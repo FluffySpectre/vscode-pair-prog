@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import {
   Message,
   MessageType,
@@ -8,6 +7,7 @@ import {
   FileRenamedPayload,
   createMessage,
 } from "../network/protocol";
+import { toRelativePathFromRoot, toAbsoluteUri } from "../utils/pathUtils";
 
 /**
  * FileOpsSync watches for file create/delete/rename events on the host
@@ -20,7 +20,7 @@ export class FileOpsSync implements vscode.Disposable {
   private isHost: boolean;
   private workspaceRoot: string;
   private remoteOpGuard = 0;
-  private ignoredPatterns: string[]; // Glob patterns to ignore
+  private ignoredPatterns: string[];
 
   constructor(
     sendFn: (msg: Message) => void,
@@ -76,7 +76,7 @@ export class FileOpsSync implements vscode.Disposable {
   // Host: Broadcast Events
 
   private async onFileCreated(uri: vscode.Uri): Promise<void> {
-    const relativePath = this.toRelativePath(uri);
+    const relativePath = toRelativePathFromRoot(uri, this.workspaceRoot);
     if (!relativePath || this.isIgnored(relativePath)) { return; }
 
     let content = "";
@@ -87,15 +87,12 @@ export class FileOpsSync implements vscode.Disposable {
       // Not a text file or unreadable - send empty content
     }
 
-    const payload: FileCreatedPayload = {
-      filePath: relativePath,
-      content,
-    };
+    const payload: FileCreatedPayload = { filePath: relativePath, content };
     this.sendFn(createMessage(MessageType.FileCreated, payload));
   }
 
   private onFileDeleted(uri: vscode.Uri): void {
-    const relativePath = this.toRelativePath(uri);
+    const relativePath = toRelativePathFromRoot(uri, this.workspaceRoot);
     if (!relativePath || this.isIgnored(relativePath)) { return; }
 
     const payload: FileDeletedPayload = { filePath: relativePath };
@@ -103,22 +100,19 @@ export class FileOpsSync implements vscode.Disposable {
   }
 
   private onFileRenamed(oldUri: vscode.Uri, newUri: vscode.Uri): void {
-    const oldPath = this.toRelativePath(oldUri);
-    const newPath = this.toRelativePath(newUri);
+    const oldPath = toRelativePathFromRoot(oldUri, this.workspaceRoot);
+    const newPath = toRelativePathFromRoot(newUri, this.workspaceRoot);
     if (!oldPath || !newPath) { return; }
     if (this.isIgnored(oldPath) && this.isIgnored(newPath)) { return; }
 
-    const payload: FileRenamedPayload = {
-      oldPath,
-      newPath,
-    };
+    const payload: FileRenamedPayload = { oldPath, newPath };
     this.sendFn(createMessage(MessageType.FileRenamed, payload));
   }
 
   // Client: Apply Remote File Operations
 
   async handleFileCreated(payload: FileCreatedPayload): Promise<void> {
-    const uri = this.toAbsoluteUri(payload.filePath);
+    const uri = toAbsoluteUri(payload.filePath);
 
     this.remoteOpGuard++;
     try {
@@ -138,7 +132,7 @@ export class FileOpsSync implements vscode.Disposable {
   }
 
   async handleFileDeleted(payload: FileDeletedPayload): Promise<void> {
-    const uri = this.toAbsoluteUri(payload.filePath);
+    const uri = toAbsoluteUri(payload.filePath);
 
     this.remoteOpGuard++;
     try {
@@ -151,8 +145,8 @@ export class FileOpsSync implements vscode.Disposable {
   }
 
   async handleFileRenamed(payload: FileRenamedPayload): Promise<void> {
-    const oldUri = this.toAbsoluteUri(payload.oldPath);
-    const newUri = this.toAbsoluteUri(payload.newPath);
+    const oldUri = toAbsoluteUri(payload.oldPath);
+    const newUri = toAbsoluteUri(payload.newPath);
 
     this.remoteOpGuard++;
     try {
@@ -164,53 +158,27 @@ export class FileOpsSync implements vscode.Disposable {
     }
   }
 
-  // Path Utilities
-
-  private toRelativePath(uri: vscode.Uri): string | null {
-    const filePath = uri.fsPath;
-    if (!filePath.startsWith(this.workspaceRoot)) {
-      return null;
-    }
-    return filePath
-      .slice(this.workspaceRoot.length + 1)
-      .replace(/\\/g, "/");
-  }
-
-  private toAbsoluteUri(relativePath: string): vscode.Uri {
-    const wsFolder = vscode.workspace.workspaceFolders![0];
-    return vscode.Uri.joinPath(wsFolder.uri, relativePath);
-  }
+  // Glob Matching
 
   private isIgnored(relativePath: string): boolean {
-    // Simple glob matching using minimatch-style patterns
-    for (const pattern of this.ignoredPatterns) {
-      if (this.simpleGlobMatch(pattern, relativePath)) {
-        return true;
-      }
-    }
-    return false;
+    return this.ignoredPatterns.some((p) => this.simpleGlobMatch(p, relativePath));
   }
 
   /**
    * Very simple glob matcher supporting:
-   *  - `*` matches any single path segment
-   *  - `**` matches any number of path segments
+   *  - `dir/**` matches anything under that directory
    *  - `*.ext` matches files with a given extension
+   *  - exact string match as fallback
    */
   private simpleGlobMatch(pattern: string, filePath: string): boolean {
-    // Handle "dir/**" - matches anything under that directory
     if (pattern.endsWith("/**")) {
       const prefix = pattern.slice(0, -3);
       return filePath.startsWith(prefix + "/") || filePath === prefix;
     }
-
-    // Handle "*.ext" - matches files ending with that extension
     if (pattern.startsWith("*.")) {
       const ext = pattern.slice(1); // e.g., ".lock"
       return filePath.endsWith(ext);
     }
-
-    // Exact match
     return filePath === pattern;
   }
 

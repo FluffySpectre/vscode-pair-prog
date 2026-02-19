@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { Connection, Doc } from "sharedb/lib/client";
+import { toRelativePath, toAbsoluteUri } from "../utils/pathUtils";
 
 type OtTextSkip = number;
 type OtTextInsert = string;
@@ -15,13 +16,8 @@ export class ShareDBBridge implements vscode.Disposable {
   private docs: Map<string, Doc<string>> = new Map();
   private remoteEditGuard = 0;
   private disposables: vscode.Disposable[] = [];
-  private workspaceRoot: string;
 
-  constructor(
-    workspaceRoot: string,
-    connection: Connection
-  ) {
-    this.workspaceRoot = workspaceRoot;
+  constructor(connection: Connection) {
     this.connection = connection;
   }
 
@@ -38,7 +34,7 @@ export class ShareDBBridge implements vscode.Disposable {
         if (doc.uri.scheme !== "file") {
           return;
         }
-        const filePath = this.toRelativePath(doc.uri);
+        const filePath = toRelativePath(doc.uri);
         if (!filePath) {
           return;
         }
@@ -117,7 +113,7 @@ export class ShareDBBridge implements vscode.Disposable {
       return;
     }
 
-    const filePath = this.toRelativePath(e.document.uri);
+    const filePath = toRelativePath(e.document.uri);
     if (!filePath) {
       return;
     }
@@ -172,7 +168,7 @@ export class ShareDBBridge implements vscode.Disposable {
       return;
     }
 
-    const uri = this.toAbsoluteUri(filePath);
+    const uri = toAbsoluteUri(filePath);
     let doc: vscode.TextDocument;
 
     try {
@@ -215,7 +211,7 @@ export class ShareDBBridge implements vscode.Disposable {
     filePath: string,
     sharedbContent: string
   ): Promise<void> {
-    const uri = this.toAbsoluteUri(filePath);
+    const uri = toAbsoluteUri(filePath);
     let doc: vscode.TextDocument;
 
     try {
@@ -243,29 +239,6 @@ export class ShareDBBridge implements vscode.Disposable {
     } finally {
       this.remoteEditGuard--;
     }
-  }
-
-  // Path Utilities
-
-  private toRelativePath(uri: vscode.Uri): string | null {
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) {
-      return null;
-    }
-
-    const rootPath = wsFolder.uri.fsPath;
-    const filePath = uri.fsPath;
-
-    if (!filePath.startsWith(rootPath)) {
-      return null;
-    }
-
-    return filePath.slice(rootPath.length + 1).replace(/\\/g, "/");
-  }
-
-  toAbsoluteUri(relativePath: string): vscode.Uri {
-    const wsFolder = vscode.workspace.workspaceFolders![0];
-    return vscode.Uri.joinPath(wsFolder.uri, relativePath);
   }
 
   dispose(): void {

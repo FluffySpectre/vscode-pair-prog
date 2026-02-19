@@ -20,6 +20,8 @@ import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { StatusBar } from "../ui/statusBar";
 import { WhiteboardPanel } from "../ui/whiteboardPanel";
+import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
+import { showChatMessage, promptAndSendMessage } from "../utils/chatUtils";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -53,7 +55,7 @@ export class HostSession implements vscode.Disposable {
     this.server = new PairProgServer();
 
     const config = vscode.workspace.getConfiguration("pairprog");
-    this.username = config.get<string>("username") || this.getDefaultUsername();
+    this.username = config.get<string>("username") || getSystemUsername("Host");
   }
 
   // Start
@@ -62,7 +64,6 @@ export class HostSession implements vscode.Disposable {
     const config = vscode.workspace.getConfiguration("pairprog");
     const port = config.get<number>("port") || 9876;
 
-    // Start the server
     this.address = await this.server.start(port);
     this.sharedbServer = new ShareDBServer(this.server);
     this.statusBar.setHosting(this.address);
@@ -87,7 +88,6 @@ export class HostSession implements vscode.Disposable {
       }
     });
 
-    // Handle client connection
     this.server.on("clientConnected", (hello: HelloPayload) => {
       this.onClientConnected(hello);
     });
@@ -124,7 +124,6 @@ export class HostSession implements vscode.Disposable {
   private async onClientConnected(hello: HelloPayload): Promise<void> {
     this.clientUsername = hello.username || "Anonymous";
 
-    // Validate workspace compatibility
     const wsFolder = vscode.workspace.workspaceFolders?.[0];
     if (!wsFolder) {
       this.server.send(
@@ -142,27 +141,21 @@ export class HostSession implements vscode.Disposable {
       );
     }
 
-    // Update status bar
     this.statusBar.setHostConnected(this.address, this.clientUsername);
     vscode.window.showInformationMessage(
       `${this.clientUsername} connected to your session.`
     );
 
-    // Setup sync components
     this.setupSync();
 
-    // Send Welcome
     const openFiles = this.getOpenTextFiles();
-    const welcome: WelcomePayload = {
-      hostUsername: this.username,
-      openFiles,
-    };
+    const welcome: WelcomePayload = { hostUsername: this.username, openFiles };
     this.server.send(createMessage(MessageType.Welcome, welcome));
 
     // Ensure ShareDB docs exist for all open files
     for (const filePath of openFiles) {
       try {
-        const uri = this.sharedbBridge!.toAbsoluteUri(filePath);
+        const uri = toAbsoluteUri(filePath);
         const doc = await vscode.workspace.openTextDocument(uri);
         await this.sharedbBridge!.ensureDoc(filePath, doc.getText());
       } catch {
@@ -170,7 +163,6 @@ export class HostSession implements vscode.Disposable {
       }
     }
 
-    // Send initial cursor position
     this.cursorSync!.sendCurrentCursor();
   }
 
@@ -193,64 +185,35 @@ export class HostSession implements vscode.Disposable {
   private async onMessage(msg: Message): Promise<void> {
     switch (msg.type) {
       case MessageType.CursorUpdate:
-        if (this.cursorSync) {
-          this.cursorSync.handleRemoteCursorUpdate(
-            msg.payload as CursorUpdatePayload
-          );
-        }
+        this.cursorSync?.handleRemoteCursorUpdate(msg.payload as CursorUpdatePayload);
         break;
 
       case MessageType.FollowUpdate:
-        if (this.cursorSync) {
-          this.cursorSync.handleRemoteFollowUpdate(
-            msg.payload as FollowUpdatePayload
-          );
-        }
+        this.cursorSync?.handleRemoteFollowUpdate(msg.payload as FollowUpdatePayload);
         break;
 
       case MessageType.FileSaveRequest:
         if (this.documentSync) {
-          await this.documentSync.handleFileSaveRequest(
-            msg.payload as FileSaveRequestPayload
-          );
+          await this.documentSync.handleFileSaveRequest(msg.payload as FileSaveRequestPayload);
         }
         break;
-      
+
       case MessageType.WhiteboardStroke:
-        this.ensureWhiteboard(this._context);
-        if (this.whiteboard && !this.whiteboard.disposed) {
-          this.whiteboard.handleRemoteStroke(
-            msg.payload as WhiteboardStrokePayload
-          );
-        }
+        this.ensureWhiteboard();
+        this.whiteboard?.handleRemoteStroke(msg.payload as WhiteboardStrokePayload);
         break;
 
       case MessageType.WhiteboardClear:
-        if (this.whiteboard && !this.whiteboard.disposed) {
-          this.whiteboard.handleRemoteClear();
-        }
+        this.whiteboard?.handleRemoteClear();
         break;
 
-      case MessageType.ChatMessage: {
-        const payload = msg.payload as ChatMessagePayload;
-        const text = payload.text ?? "";
-        const sender = payload.username || this.clientUsername || "Client";
-        const urlMatch = text.match(/https?:\/\/[^\s]+/);
-        const buttons: string[] = urlMatch ? ["Open Link", "Copy", "Reply"] : ["Copy", "Reply"];
-        vscode.window.showInformationMessage(
-          `${sender}: ${text}`,
-          ...buttons
-        ).then(async (action) => {
-          if (action === "Open Link" && urlMatch) {
-            await vscode.env.openExternal(vscode.Uri.parse(urlMatch[0]));
-          } else if (action === "Copy") {
-            await vscode.env.clipboard.writeText(text);
-          } else if (action === "Reply") {
-            await this.sendMessage();
-          }
-        });
+      case MessageType.ChatMessage:
+        await showChatMessage(
+          msg.payload as ChatMessagePayload,
+          this.clientUsername || "Client",
+          () => this.sendMessage()
+        );
         break;
-      }
 
       default:
         break;
@@ -266,30 +229,23 @@ export class HostSession implements vscode.Disposable {
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
     const sendFn = (msg: Message) => this.server.send(msg);
+    this._sendFn = sendFn;
 
     const sharedbConnection = this.sharedbServer!.getHostConnection();
-    this.sharedbBridge = new ShareDBBridge(wsFolder.uri.fsPath, sharedbConnection);
+    this.sharedbBridge = new ShareDBBridge(sharedbConnection);
     this.sharedbBridge.activate();
 
-    this.documentSync = new DocumentSync(sendFn, true, wsFolder.uri.fsPath);
+    this.documentSync = new DocumentSync(sendFn, true);
     this.documentSync.activate();
 
     this.cursorSync = new CursorSync(sendFn, this.username, color);
     this.cursorSync.activate();
-
     this.cursorSync.onDidChangeFollowMode((following) => {
       this.statusBar.setFollowing(following);
     });
 
-    this.fileOpsSync = new FileOpsSync(
-      sendFn,
-      true,
-      wsFolder.uri.fsPath,
-      ignored
-    );
+    this.fileOpsSync = new FileOpsSync(sendFn, true, wsFolder.uri.fsPath, ignored);
     this.fileOpsSync.activate();
-
-    this._sendFn = sendFn;
   }
 
   private teardownSync(): void {
@@ -312,62 +268,49 @@ export class HostSession implements vscode.Disposable {
     const wsFolder = vscode.workspace.workspaceFolders?.[0];
     if (!wsFolder) { return []; }
 
-    const rootPath = wsFolder.uri.fsPath;
     const files: string[] = [];
-
     for (const doc of vscode.workspace.textDocuments) {
-      if (doc.uri.scheme !== "file") { continue; }
-      if (!doc.uri.fsPath.startsWith(rootPath)) { continue; }
-      if (doc.isClosed) { continue; }
-
-      const relativePath = doc.uri.fsPath
-        .slice(rootPath.length + 1)
-        .replace(/\\/g, "/");
-      files.push(relativePath);
+      if (doc.uri.scheme !== "file" || doc.isClosed) { continue; }
+      const relativePath = toRelativePath(doc.uri);
+      if (relativePath) {
+        files.push(relativePath);
+      }
     }
-
     return files;
   }
 
-  private getDefaultUsername(): string {
-    return require("os").userInfo().username || "Host";
-  }
-
   toggleFollowMode(): void {
-    if (!this.cursorSync) { return; }
-    this.cursorSync.toggleFollow();
+    this.cursorSync?.toggleFollow();
   }
 
-  private ensureWhiteboard(context: vscode.ExtensionContext) {
+  private ensureWhiteboard(): void {
     if (!this._sendFn) { return; }
     if (!this.whiteboard || this.whiteboard.disposed) {
-      this.whiteboard = new WhiteboardPanel(context, this._sendFn);
+      this.whiteboard = new WhiteboardPanel(this._context, this._sendFn);
     }
   }
 
-  openWhiteboard() {
-    this.ensureWhiteboard(this._context);
+  openWhiteboard(): void {
+    this.ensureWhiteboard();
     if (this.whiteboard && !this.whiteboard.disposed) {
       this.whiteboard.reveal();
     }
   }
 
   async sendMessage(): Promise<void> {
-    if (!this._sendFn) {
-      vscode.window.showWarningMessage("No client connected yet.");
-      return;
-    }
-    const text = await vscode.window.showInputBox({
-      prompt: `Send a message to ${this.clientUsername || "client"}`,
-      placeHolder: "Type a message, link, or code snippet...",
-      validateInput: (value) => {
-        if (!value || value.trim().length === 0) { return "Message cannot be empty."; }
-        if (value.length > 500) { return `Too long (${value.length}/500 chars).`; }
-        return null;
-      },
-    });
-    if (!text || text.trim().length === 0) { return; }
-    this._sendFn(createMessage(MessageType.ChatMessage, { text: text.trim(), username: this.username } as ChatMessagePayload));
+    await promptAndSendMessage(
+      !!this._sendFn,
+      "No client connected yet.",
+      this.clientUsername || "client",
+      (text) => {
+        this._sendFn!(
+          createMessage(MessageType.ChatMessage, {
+            text,
+            username: this.username,
+          } as ChatMessagePayload)
+        );
+      }
+    );
   }
 
   get isActive(): boolean {

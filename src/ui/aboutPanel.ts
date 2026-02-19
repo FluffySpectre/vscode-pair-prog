@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
 export class AboutPanel {
   private static currentPanel: AboutPanel | undefined;
@@ -24,7 +26,13 @@ export class AboutPanel {
       { enableScripts: false }
     );
 
-    this.panel.webview.html = this.getHtml(pkg);
+    const htmlPath = path.join(context.extensionPath, "src", "ui", "webviews", "about.html");
+    const template = fs.readFileSync(htmlPath, "utf-8");
+    this.panel.webview.html = template
+      .replace("{{name}}", pkg.displayName ?? "")
+      .replace("{{version}}", pkg.version ?? "")
+      .replace("{{description}}", pkg.description ?? "")
+      .replace("{{publisher}}", "Björn Bosse");
 
     this.panel.onDidDispose(() => {
       this._disposed = true;
@@ -32,108 +40,5 @@ export class AboutPanel {
         AboutPanel.currentPanel = undefined;
       }
     });
-  }
-
-  private getHtml(pkg: any): string {
-    const name = pkg.displayName;
-    const version = pkg.version;
-    const description = pkg.description;
-    const publisher = "Björn Bosse";
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-<style>
-  body {
-    margin: 0;
-    padding: 40px;
-    font-family: var(--vscode-font-family);
-    color: var(--vscode-foreground);
-    background: var(--vscode-editor-background);
-    display: flex;
-    justify-content: center;
-  }
-  .container {
-    max-width: 480px;
-    text-align: center;
-  }
-  h1 {
-    margin: 0 0 4px 0;
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--vscode-foreground);
-  }
-  .version {
-    font-size: 13px;
-    color: var(--vscode-descriptionForeground);
-    margin-bottom: 16px;
-  }
-  .description {
-    font-size: 14px;
-    line-height: 1.5;
-    color: var(--vscode-foreground);
-    margin-bottom: 24px;
-  }
-  .features {
-    text-align: left;
-    margin-bottom: 24px;
-  }
-  .features h2 {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    color: var(--vscode-foreground);
-  }
-  .features ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  .features li {
-    padding: 4px 0;
-    font-size: 13px;
-    color: var(--vscode-foreground);
-  }
-  .features li::before {
-    content: "\\2022";
-    color: var(--vscode-textLink-foreground);
-    margin-right: 8px;
-  }
-  .divider {
-    border: none;
-    border-top: 1px solid var(--vscode-widget-border);
-    margin: 20px 0;
-  }
-  .footer {
-    font-size: 12px;
-    color: var(--vscode-descriptionForeground);
-  }
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>${name}</h1>
-  <div class="version">Version ${version}</div>
-  <p class="description">${description}</p>
-
-  <div class="features">
-    <h2>Features</h2>
-    <ul>
-      <li>Real-time collaborative coding</li>
-      <li>Live cursor and selection sharing</li>
-      <li>Follow mode to track your partner</li>
-      <li>Shared whiteboard for sketching ideas</li>
-      <li>File create, delete &amp; rename sync</li>
-      <li>Peer-to-peer over LAN &mdash; no cloud required</li>
-    </ul>
-  </div>
-
-  <hr class="divider" />
-  <div class="footer">
-    by <strong>${publisher}</strong>
-  </div>
-</div>
-</body>
-</html>`;
   }
 }

@@ -20,10 +20,12 @@ export interface ClientEvents {
 
 export class PairProgClient extends EventEmitter {
   private socket: ws.WebSocket | null = null;
+  private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 15;
   private readonly RECONNECT_INTERVAL_MS = 2000;
+  private readonly HEARTBEAT_TIMEOUT_MS = 20000;
   private address: string = "";
   private helloPayload: HelloPayload | null = null;
   private intentionalDisconnect = false;
@@ -80,6 +82,7 @@ export class PairProgClient extends EventEmitter {
   disconnect(): void {
     this.intentionalDisconnect = true;
     this.stopReconnect();
+    this.stopHeartbeat();
 
     if (this.socket) {
       try {
@@ -100,10 +103,33 @@ export class PairProgClient extends EventEmitter {
     }
   }
 
+  // Heartbeat
+
+  private resetHeartbeatTimeout(): void {
+    if (this.heartbeatTimer) {
+      clearTimeout(this.heartbeatTimer);
+    }
+    this.heartbeatTimer = setTimeout(() => {
+      // Server hasn't sent a Ping in too long - assume connection is dead
+      if (this.socket) {
+        this.socket.terminate();
+      }
+    }, this.HEARTBEAT_TIMEOUT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearTimeout(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
   // Socket Listeners
 
   private setupSocketListeners(): void {
     if (!this.socket) { return; }
+
+    this.resetHeartbeatTimeout();
 
     this.socket.on("message", (data) => {
       try {
@@ -115,6 +141,7 @@ export class PairProgClient extends EventEmitter {
             break;
 
           case MessageType.Ping:
+            this.resetHeartbeatTimeout();
             this.send(createMessage(MessageType.Pong, {}));
             break;
 
@@ -139,6 +166,7 @@ export class PairProgClient extends EventEmitter {
 
     this.socket.on("close", () => {
       this.socket = null;
+      this.stopHeartbeat();
       if (!this.intentionalDisconnect) {
         this.attemptReconnect();
       } else {

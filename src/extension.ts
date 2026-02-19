@@ -237,6 +237,48 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Share Terminal (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.shareTerminal", () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage(
+          "Only the host can share a terminal."
+        );
+        return;
+      }
+      hostSession.shareTerminal();
+    })
+  );
+
+  // Unshare Terminal (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.unshareTerminal", async () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage(
+          "Only the host can unshare a terminal."
+        );
+        return;
+      }
+      await hostSession.unshareTerminal();
+    })
+  );
+
+  // Grant/Revoke Terminal Write Access (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.toggleTerminalReadonly", async () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage(
+          "Only the host can change terminal write access."
+        );
+        return;
+      }
+      await hostSession.toggleTerminalReadonly();
+    })
+  );
+
   // About
 
   context.subscriptions.push(
@@ -256,6 +298,9 @@ export function activate(context: vscode.ExtensionContext) {
           { label: "$(eye) Toggle Follow Mode", description: "" },
           { label: "$(edit) Open Whiteboard", description: "" },
           { label: "$(comment) Send Message", description: "" },
+          { label: "$(terminal) Share Terminal", description: "" },
+          { label: "$(close) Unshare Terminal", description: "" },
+          { label: "$(unlock) Grant/Revoke Terminal Write Access", description: "" },
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(info) About", description: "" },
           { label: "$(debug-stop) Stop Hosting", description: "" },
@@ -291,6 +336,12 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");
+      } else if (picked.label.includes("Share Terminal")) {
+        vscode.commands.executeCommand("pairprog.shareTerminal");
+      } else if (picked.label.includes("Unshare Terminal")) {
+        vscode.commands.executeCommand("pairprog.unshareTerminal");
+      } else if (picked.label.includes("Grant/Revoke Terminal Write Access")) {
+        vscode.commands.executeCommand("pairprog.toggleTerminalReadonly");
       } else if (picked.label.includes("Stop Hosting")) {
         vscode.commands.executeCommand("pairprog.stopSession");
       } else if (picked.label.includes("Disconnect")) {

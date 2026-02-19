@@ -23,6 +23,15 @@ export enum MessageType {
   // Chat
   ChatMessage = "chatMessage",
 
+  // Terminal sharing
+  TerminalShared = "terminalShared",
+  TerminalOutput = "terminalOutput",
+  TerminalInput = "terminalInput",
+  TerminalResize = "terminalResize",
+  TerminalClosed = "terminalClosed",
+  TerminalUnshared = "terminalUnshared",
+  TerminalReadonlyChanged = "terminalReadonlyChanged",
+
   // Lifecycle
   Ping = "ping",
   Pong = "pong",
@@ -107,6 +116,43 @@ export interface WhiteboardClearPayload {}
 export interface ChatMessagePayload {
   text: string;
   username: string;
+}
+
+export interface TerminalSharedPayload {
+  terminalId: string;
+  name: string;
+  cols: number;
+  rows: number;
+  readonly?: boolean; // defaults to true if absent
+}
+
+export interface TerminalOutputPayload {
+  terminalId: string;
+  data: string;
+}
+
+export interface TerminalInputPayload {
+  terminalId: string;
+  data: string;
+}
+
+export interface TerminalResizePayload {
+  terminalId: string;
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalClosedPayload {
+  terminalId: string;
+}
+
+export interface TerminalUnsharedPayload {
+  terminalId: string;
+}
+
+export interface TerminalReadonlyChangedPayload {
+  terminalId: string;
+  readonly: boolean;
 }
 
 export interface ErrorPayload {

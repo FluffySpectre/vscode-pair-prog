@@ -11,6 +11,7 @@ import {
   TerminalResizePayload,
   TerminalClosedPayload,
   TerminalUnsharedPayload,
+  TerminalReadonlyChangedPayload,
   createMessage,
 } from "../network/protocol";
 
@@ -144,13 +145,17 @@ class ClientPseudoterminal implements vscode.Pseudoterminal {
 
   private onInputCallback: (data: string) => void;
   private onResizeCallback: (cols: number, rows: number) => void;
+  private _readonly = true; // readonly by default
+  private _readonlyMessageShown = false;
 
   constructor(
     onInput: (data: string) => void,
-    onResize: (cols: number, rows: number) => void
+    onResize: (cols: number, rows: number) => void,
+    initialReadonly = true
   ) {
     this.onInputCallback = onInput;
     this.onResizeCallback = onResize;
+    this._readonly = initialReadonly;
   }
 
   open(): void {}
@@ -158,11 +163,34 @@ class ClientPseudoterminal implements vscode.Pseudoterminal {
   close(): void {}
 
   handleInput(data: string): void {
+    if (this._readonly) {
+      if (!this._readonlyMessageShown) {
+        this._readonlyMessageShown = true;
+        this.writeEmitter.fire(
+          "\r\n\x1b[33m[Read-Only: host has not granted write access]\x1b[0m\r\n"
+        );
+      }
+      return;
+    }
     this.onInputCallback(data);
   }
 
   setDimensions(dimensions: vscode.TerminalDimensions): void {
     this.onResizeCallback(dimensions.columns, dimensions.rows);
+  }
+
+  setReadonly(value: boolean): void {
+    this._readonly = value;
+    this._readonlyMessageShown = false;
+    if (value) {
+      this.writeEmitter.fire(
+        "\r\n\x1b[33m[Write access revoked by host]\x1b[0m\r\n"
+      );
+    } else {
+      this.writeEmitter.fire(
+        "\r\n\x1b[32m[Write access granted by host]\x1b[0m\r\n"
+      );
+    }
   }
 
   writeOutput(data: string): void {
@@ -187,6 +215,7 @@ interface HostTerminalHandle {
   vsTerminal: vscode.Terminal;
   pseudoterminal: HostPseudoterminal;
   shared: boolean;
+  readonly: boolean;
 }
 
 interface ClientTerminalHandle {
@@ -301,6 +330,7 @@ export class TerminalSync implements vscode.Disposable {
       vsTerminal,
       pseudoterminal,
       shared: true,
+      readonly: true,
     });
 
     this.sendFn(
@@ -309,11 +339,12 @@ export class TerminalSync implements vscode.Disposable {
         name: displayName,
         cols,
         rows,
+        readonly: true,
       } as TerminalSharedPayload)
     );
 
     vscode.window.showInformationMessage(
-      `Shared terminal "${displayName}" with your pair.`
+      `Shared terminal "${displayName}" with your pair (read-only for client).`
     );
   }
 
@@ -341,11 +372,11 @@ export class TerminalSync implements vscode.Disposable {
 
   // Host: get list of shared terminals (for QuickPick)
 
-  getSharedTerminals(): Array<{ terminalId: string; name: string }> {
-    const result: Array<{ terminalId: string; name: string }> = [];
+  getSharedTerminals(): Array<{ terminalId: string; name: string; readonly: boolean }> {
+    const result: Array<{ terminalId: string; name: string; readonly: boolean }> = [];
     for (const handle of this.hostTerminals.values()) {
       if (handle.shared) {
-        result.push({ terminalId: handle.terminalId, name: handle.name });
+        result.push({ terminalId: handle.terminalId, name: handle.name, readonly: handle.readonly });
       }
     }
     return result;
@@ -357,6 +388,7 @@ export class TerminalSync implements vscode.Disposable {
     if (this.isHost) { return; }
 
     const { terminalId, name } = payload;
+    const isReadonly = payload.readonly ?? true;
 
     const pseudoterminal = new ClientPseudoterminal(
       (data: string) => {
@@ -375,7 +407,8 @@ export class TerminalSync implements vscode.Disposable {
             rows,
           } as TerminalResizePayload)
         );
-      }
+      },
+      isReadonly
     );
 
     const vsTerminal = vscode.window.createTerminal({
@@ -403,8 +436,44 @@ export class TerminalSync implements vscode.Disposable {
 
     const handle = this.hostTerminals.get(payload.terminalId);
     if (!handle || !handle.shared) { return; }
+    if (handle.readonly) { return; } // drop input when readonly
 
     handle.pseudoterminal.writeToProcess(payload.data);
+  }
+
+  // Host: toggle readonly state for a shared terminal
+
+  setTerminalReadonly(terminalId: string, readonly: boolean): void {
+    if (!this.isHost) { return; }
+
+    const handle = this.hostTerminals.get(terminalId);
+    if (!handle || !handle.shared) { return; }
+
+    handle.readonly = readonly;
+
+    this.sendFn(
+      createMessage(MessageType.TerminalReadonlyChanged, {
+        terminalId,
+        readonly,
+      } as TerminalReadonlyChangedPayload)
+    );
+
+    vscode.window.showInformationMessage(
+      readonly
+        ? `Write access revoked from client for terminal "${handle.name}".`
+        : `Write access granted to client for terminal "${handle.name}".`
+    );
+  }
+
+  // Client: host changed readonly state
+
+  handleTerminalReadonlyChanged(payload: TerminalReadonlyChangedPayload): void {
+    if (this.isHost) { return; }
+
+    const handle = this.clientTerminals.get(payload.terminalId);
+    if (!handle) { return; }
+
+    handle.pseudoterminal.setReadonly(payload.readonly);
   }
 
   // Client: host sent output

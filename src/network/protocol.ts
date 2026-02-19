@@ -30,6 +30,7 @@ export enum MessageType {
   TerminalResize = "terminalResize",
   TerminalClosed = "terminalClosed",
   TerminalUnshared = "terminalUnshared",
+  TerminalReadonlyChanged = "terminalReadonlyChanged",
 
   // Lifecycle
   Ping = "ping",
@@ -133,6 +134,7 @@ export interface TerminalSharedPayload {
   name: string;
   cols: number;
   rows: number;
+  readonly?: boolean; // defaults to true if absent
 }
 
 export interface TerminalOutputPayload {
@@ -157,6 +159,11 @@ export interface TerminalClosedPayload {
 
 export interface TerminalUnsharedPayload {
   terminalId: string;
+}
+
+export interface TerminalReadonlyChangedPayload {
+  terminalId: string;
+  readonly: boolean;
 }
 
 export interface ErrorPayload {

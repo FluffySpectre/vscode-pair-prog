@@ -251,6 +251,20 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Grant/Revoke Terminal Write Access (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.toggleTerminalReadonly", async () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage(
+          "Only the host can change terminal write access."
+        );
+        return;
+      }
+      await hostSession.toggleTerminalReadonly();
+    })
+  );
+
   // About
 
   context.subscriptions.push(
@@ -271,6 +285,7 @@ export function activate(context: vscode.ExtensionContext) {
           { label: "$(edit) Open Whiteboard", description: "" },
           { label: "$(terminal) Share Terminal", description: "" },
           { label: "$(close) Unshare Terminal", description: "" },
+          { label: "$(unlock) Grant/Revoke Terminal Write Access", description: "" },
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(info) About", description: "" },
           { label: "$(debug-stop) Stop Hosting", description: "" },
@@ -307,6 +322,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.executeCommand("pairprog.shareTerminal");
       } else if (picked.label.includes("Unshare Terminal")) {
         vscode.commands.executeCommand("pairprog.unshareTerminal");
+      } else if (picked.label.includes("Grant/Revoke Terminal Write Access")) {
+        vscode.commands.executeCommand("pairprog.toggleTerminalReadonly");
       } else if (picked.label.includes("Stop Hosting")) {
         vscode.commands.executeCommand("pairprog.stopSession");
       } else if (picked.label.includes("Disconnect")) {

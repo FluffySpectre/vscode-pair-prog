@@ -353,6 +353,29 @@ export class HostSession implements vscode.Disposable {
     }
   }
 
+  async toggleTerminalReadonly(): Promise<void> {
+    const terminals = this.terminalSync?.getSharedTerminals() || [];
+    if (terminals.length === 0) {
+      vscode.window.showWarningMessage("No shared terminals.");
+      return;
+    }
+
+    const items = terminals.map((t) => ({
+      label: t.name,
+      description: t.readonly ? "read-only" : "write access granted",
+      terminalId: t.terminalId,
+      readonly: t.readonly,
+    }));
+
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: "Select a terminal to grant or revoke write access",
+    });
+
+    if (picked) {
+      this.terminalSync?.setTerminalReadonly(picked.terminalId, !picked.readonly);
+    }
+  }
+
   toggleFollowMode(): void {
     if (!this.cursorSync) { return; }
     this.cursorSync.toggleFollow();

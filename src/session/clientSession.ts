@@ -18,6 +18,7 @@ import {
   TerminalOutputPayload,
   TerminalClosedPayload,
   TerminalUnsharedPayload,
+  TerminalReadonlyChangedPayload,
 } from "../network/protocol";
 import { DocumentSync } from "../sync/documentSync";
 import { CursorSync } from "../sync/cursorSync";
@@ -236,6 +237,12 @@ export class ClientSession implements vscode.Disposable {
       case MessageType.TerminalUnshared:
         this.terminalSync?.handleTerminalUnshared(
           msg.payload as TerminalUnsharedPayload
+        );
+        break;
+
+      case MessageType.TerminalReadonlyChanged:
+        this.terminalSync?.handleTerminalReadonlyChanged(
+          msg.payload as TerminalReadonlyChangedPayload
         );
         break;
 

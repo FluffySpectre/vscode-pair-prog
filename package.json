@@ -50,6 +50,10 @@
       {
         "command": "pairprog.unshareTerminal",
         "title": "PairProg: Unshare Terminal"
+      },
+      {
+        "command": "pairprog.toggleTerminalReadonly",
+        "title": "PairProg: Grant/Revoke Terminal Write Access"
       }
     ],
     "configuration": {

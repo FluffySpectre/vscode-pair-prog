@@ -12,6 +12,7 @@ import {
   FileCreatedPayload,
   FileDeletedPayload,
   FileRenamedPayload,
+  FileSavedPayload,
   createMessage,
   WhiteboardStrokePayload,
 } from "../network/protocol";
@@ -190,6 +191,14 @@ export class ClientSession implements vscode.Disposable {
         if (this.fileOpsSync) {
           await this.fileOpsSync.handleFileRenamed(
             msg.payload as FileRenamedPayload
+          );
+        }
+        break;
+
+      case MessageType.FileSaved:
+        if (this.documentSync) {
+          await this.documentSync.handleFileSaved(
+            msg.payload as FileSavedPayload
           );
         }
         break;

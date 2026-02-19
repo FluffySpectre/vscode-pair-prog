@@ -5,6 +5,8 @@ import {
   EditPayload,
   FullSyncPayload,
   OpenFilePayload,
+  FileSaveRequestPayload,
+  FileSavedPayload,
   TextChange,
   createMessage,
 } from "../network/protocol";
@@ -62,6 +64,29 @@ export class DocumentSync implements vscode.Disposable {
         }
       })
     );
+
+    // Client: intercept save and forward to host
+    if (!this.isHost) {
+      this.disposables.push(
+        vscode.workspace.onWillSaveTextDocument((e) => {
+          if (e.document.uri.scheme !== "file") { return; }
+          const filePath = this.toRelativePath(e.document.uri);
+          if (!filePath) { return; }
+
+          // Suppress the local save and ask the host to save instead
+          e.waitUntil(
+            Promise.resolve().then(() => {
+              this.sendFn(
+                createMessage(MessageType.FileSaveRequest, {
+                  filePath,
+                } as FileSaveRequestPayload)
+              );
+              return [];
+            })
+          );
+        })
+      );
+    }
   }
 
   // Handle Local Edits
@@ -212,6 +237,35 @@ export class DocumentSync implements vscode.Disposable {
       this.sendFullSync(payload.filePath, doc.getText());
     } catch {
       // File doesn't exist on host - ignore
+    }
+  }
+
+  // Host: client requested a file save
+
+  async handleFileSaveRequest(payload: FileSaveRequestPayload): Promise<void> {
+    const uri = this.toAbsoluteUri(payload.filePath);
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await doc.save();
+      this.sendFn(
+        createMessage(MessageType.FileSaved, {
+          filePath: payload.filePath,
+        } as FileSavedPayload)
+      );
+    } catch {
+      // If save fails, silently ignore - client will keep dirty state
+    }
+  }
+
+  // Client: host confirmed the file was saved
+
+  async handleFileSaved(payload: FileSavedPayload): Promise<void> {
+    const uri = this.toAbsoluteUri(payload.filePath);
+    try {
+      // Revert the document so VSCode re-reads from disk and clears the dirty state
+      await vscode.commands.executeCommand("workbench.action.files.revert", uri);
+    } catch {
+      // Ignore if revert fails
     }
   }
 

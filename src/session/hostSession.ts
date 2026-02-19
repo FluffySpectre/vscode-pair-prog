@@ -10,6 +10,7 @@ import {
   CursorUpdatePayload,
   FollowUpdatePayload,
   OpenFilePayload,
+  FileSaveRequestPayload,
   createMessage,
   WhiteboardStrokePayload,
 } from "../network/protocol";
@@ -213,6 +214,14 @@ export class HostSession implements vscode.Disposable {
         if (this.documentSync) {
           await this.documentSync.handleOpenFileRequest(
             msg.payload as OpenFilePayload
+          );
+        }
+        break;
+
+      case MessageType.FileSaveRequest:
+        if (this.documentSync) {
+          await this.documentSync.handleFileSaveRequest(
+            msg.payload as FileSaveRequestPayload
           );
         }
         break;

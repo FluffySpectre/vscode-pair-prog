@@ -18,6 +18,8 @@ export enum MessageType {
   FileCreated = "fileCreated",
   FileDeleted = "fileDeleted",
   FileRenamed = "fileRenamed",
+  FileSaveRequest = "fileSaveRequest",
+  FileSaved = "fileSaved",
 
   // Whiteboard
   WhiteboardStroke = "whiteboardStroke",
@@ -108,6 +110,14 @@ export interface FileDeletedPayload {
 export interface FileRenamedPayload {
   oldPath: string;
   newPath: string;
+}
+
+export interface FileSaveRequestPayload {
+  filePath: string;
+}
+
+export interface FileSavedPayload {
+  filePath: string;
 }
 
 export interface WhiteboardStrokePayload {

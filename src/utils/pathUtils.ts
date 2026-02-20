@@ -1,23 +1,37 @@
 import * as vscode from "vscode";
 
+const SYNCABLE_SCHEMES = new Set(["file", "pairprog"]);
+
+export function isSyncableDocument(uri: vscode.Uri): boolean {
+  return SYNCABLE_SCHEMES.has(uri.scheme);
+}
+
 export function toRelativePath(uri: vscode.Uri): string | null {
-  const wsFolder = vscode.workspace.workspaceFolders?.[0];
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders) {
+    return null;
+  }
+
+  // Find the workspace folder that matches this URI's scheme
+  const wsFolder = folders.find((f) => f.uri.scheme === uri.scheme);
   if (!wsFolder) {
     return null;
   }
 
-  const rootPath = wsFolder.uri.fsPath;
-  const filePath = uri.fsPath;
+  const rootPath = wsFolder.uri.path;
+  const filePath = uri.path;
 
-  if (!filePath.startsWith(rootPath)) {
+  if (!filePath.startsWith(rootPath + "/") && filePath !== rootPath) {
     return null;
   }
 
-  return filePath.slice(rootPath.length + 1).replace(/\\/g, "/");
+  const relative = filePath.slice(rootPath.length + 1);
+  return relative || null;
 }
 
 export function toAbsoluteUri(relativePath: string): vscode.Uri {
-  const wsFolder = vscode.workspace.workspaceFolders![0];
+  const folders = vscode.workspace.workspaceFolders!;
+  const wsFolder = folders.find((f) => f.uri.scheme === "pairprog") || folders[0];
   return vscode.Uri.joinPath(wsFolder.uri, relativePath);
 }
 

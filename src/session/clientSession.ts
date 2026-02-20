@@ -12,6 +12,9 @@ import {
   FileDeletedPayload,
   FileRenamedPayload,
   FileSavedPayload,
+  DirectoryTreePayload,
+  FileContentRequestPayload,
+  FileContentResponsePayload,
   createMessage,
   WhiteboardStrokePayload,
   ChatMessagePayload,
@@ -30,18 +33,22 @@ import { StatusBar } from "../ui/statusBar";
 import { WhiteboardPanel } from "../ui/whiteboardPanel";
 import { getSystemUsername } from "../utils/pathUtils";
 import { showChatMessage, promptAndSendMessage } from "../utils/chatUtils";
+import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 import { type as otText } from "ot-text";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ShareDBClient = require("sharedb/lib/client");
 ShareDBClient.types.register(otText);
 
+const VFS_SCHEME = "pairprog";
+
 /**
  * ClientSession manages the client-side lifecycle:
  *  1. Connects to the host's WebSocket server
  *  2. Sends Hello, receives Welcome
- *  3. Subscribes to ShareDB documents for open files
- *  4. Relays local edits via ShareDB and applies remote ops
+ *  3. Receives DirectoryTree, builds virtual workspace
+ *  4. Subscribes to ShareDB documents for open files
+ *  5. Relays local edits via ShareDB and applies remote ops
  */
 export class ClientSession implements vscode.Disposable {
   private client: PairProgClient;
@@ -61,10 +68,13 @@ export class ClientSession implements vscode.Disposable {
   private _sendFn?: (msg: Message) => void;
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
+  private vfsProvider: PairProgFileSystemProvider;
+  private pendingContentRequests = new Map<string, (content: Uint8Array) => void>();
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext) {
+  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider) {
     this.statusBar = statusBar;
     this._context = context;
+    this.vfsProvider = vfsProvider;
     this.client = new PairProgClient();
 
     const config = vscode.workspace.getConfiguration("pairprog");
@@ -76,14 +86,9 @@ export class ClientSession implements vscode.Disposable {
   async connect(address: string): Promise<void> {
     this.address = address;
 
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) {
-      throw new Error("No workspace folder open.");
-    }
-
     const hello: HelloPayload = {
       username: this.username,
-      workspaceFolder: wsFolder.name,
+      workspaceFolder: "virtual",
     };
 
     this.setupClientEvents();
@@ -94,6 +99,7 @@ export class ClientSession implements vscode.Disposable {
 
   disconnect(): void {
     this.teardownSync();
+    this.teardownVfs();
     this.client.disconnect();
     this.statusBar.setDisconnected();
     vscode.window.showInformationMessage("Disconnected from pair programming session.");
@@ -125,7 +131,7 @@ export class ClientSession implements vscode.Disposable {
     });
   }
 
-  // Connected
+  // Connected - store welcome data, wait for DirectoryTree before setting up sync
 
   private onConnected(welcome: WelcomePayload): void {
     this.hostUsername = welcome.hostUsername;
@@ -135,30 +141,126 @@ export class ClientSession implements vscode.Disposable {
     vscode.window.showInformationMessage(
       `Connected to ${this.hostUsername}'s session.`
     );
-
-    this.setupSync();
-
-    for (const filePath of this._openFiles) {
-      this.sharedbBridge?.ensureDoc(filePath).catch((err) => {
-        console.warn(`[PairProg Client] Failed to subscribe to ${filePath}:`, err);
-      });
-    }
-
-    this.cursorSync!.sendCurrentCursor();
   }
 
   // Disconnected
 
   private onDisconnected(): void {
     this.teardownSync();
+    this.teardownVfs();
     this.statusBar.setDisconnected();
     vscode.window.showWarningMessage("Disconnected from pair programming session.");
+  }
+
+  // Virtual Filesystem Setup
+
+  private async onDirectoryTree(payload: DirectoryTreePayload): Promise<void> {
+    this.vfsProvider.setContentRequester((path) => this.requestFileContent(path));
+    this.vfsProvider.populateTree(payload.entries);
+
+    // Add the virtual workspace folder so the client can browse remote files in the explorer
+    const alreadyHasFolder = (vscode.workspace.workspaceFolders || [])
+      .some((f) => f.uri.scheme === VFS_SCHEME);
+
+    if (!alreadyHasFolder) {
+      const wsUri = vscode.Uri.parse(`${VFS_SCHEME}:/${payload.workspaceName}`);
+      const numFolders = vscode.workspace.workspaceFolders?.length || 0;
+
+      vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
+        uri: wsUri,
+        name: `Remote: ${payload.workspaceName}`,
+      });
+    }
+
+    this.setupSync();
+
+    this.cursorSync!.sendCurrentCursor();
+  }
+
+  private requestFileContent(relativePath: string): Promise<Uint8Array> {
+    return new Promise<Uint8Array>((resolve) => {
+      this.pendingContentRequests.set(relativePath, resolve);
+      this.client.send(
+        createMessage(MessageType.FileContentRequest, {
+          filePath: relativePath,
+        } as FileContentRequestPayload)
+      );
+
+      // Timeout after 10 seconds to avoid hanging forever
+      setTimeout(() => {
+        if (this.pendingContentRequests.has(relativePath)) {
+          this.pendingContentRequests.delete(relativePath);
+          resolve(new Uint8Array(0));
+        }
+      }, 10000);
+    });
+  }
+
+  private onFileContentResponse(payload: FileContentResponsePayload): void {
+    const resolver = this.pendingContentRequests.get(payload.filePath);
+    if (!resolver) {
+      return;
+    }
+    this.pendingContentRequests.delete(payload.filePath);
+
+    let content: Uint8Array;
+    if (payload.encoding === "base64") {
+      content = Uint8Array.from(Buffer.from(payload.content, "base64"));
+    } else {
+      content = new TextEncoder().encode(payload.content);
+    }
+
+    resolver(content);
+  }
+
+  private teardownVfs(): void {
+    // Resolve any pending content requests to avoid hanging promises
+    for (const resolver of this.pendingContentRequests.values()) {
+      resolver(new Uint8Array(0));
+    }
+    this.pendingContentRequests.clear();
+
+    // Close all editor tabs that belong to the virtual filesystem
+    const vfsTabs: vscode.Tab[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const input = tab.input;
+        if (input instanceof vscode.TabInputText && input.uri.scheme === VFS_SCHEME) {
+          vfsTabs.push(tab);
+        } else if (input instanceof vscode.TabInputTextDiff) {
+          if (input.original.scheme === VFS_SCHEME || input.modified.scheme === VFS_SCHEME) {
+            vfsTabs.push(tab);
+          }
+        }
+      }
+    }
+    if (vfsTabs.length > 0) {
+      vscode.window.tabGroups.close(vfsTabs);
+    }
+
+    // Remove the virtual workspace folder
+    const folders = vscode.workspace.workspaceFolders || [];
+    const vfsIndex = folders.findIndex((f) => f.uri.scheme === VFS_SCHEME);
+    if (vfsIndex !== -1) {
+      vscode.workspace.updateWorkspaceFolders(vfsIndex, 1);
+    }
+
+    // Clear the VFS provider state
+    this.vfsProvider.clear();
   }
 
   // Message Router
 
   private async onMessage(msg: Message): Promise<void> {
     switch (msg.type) {
+      case MessageType.DirectoryTree:
+        await this.onDirectoryTree(msg.payload as DirectoryTreePayload);
+        break;
+
+      case MessageType.FileContentResponse:
+        this.onFileContentResponse(msg.payload as FileContentResponsePayload);
+        break;
+
       case MessageType.CursorUpdate:
         this.cursorSync?.handleRemoteCursorUpdate(msg.payload as CursorUpdatePayload);
         break;
@@ -246,7 +348,6 @@ export class ClientSession implements vscode.Disposable {
   // Sync Setup / Teardown
 
   private setupSync(): void {
-    const wsFolder = vscode.workspace.workspaceFolders![0];
     const config = vscode.workspace.getConfiguration("pairprog");
     const color = config.get<string>("highlightColor") || "#FF6B6B";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
@@ -265,7 +366,7 @@ export class ClientSession implements vscode.Disposable {
     this.sharedbBridge = new ShareDBBridge(sharedbConnection);
     this.sharedbBridge.activate();
 
-    this.documentSync = new DocumentSync(sendFn, false);
+    this.documentSync = new DocumentSync(sendFn, false, this.vfsProvider);
     this.documentSync.activate();
 
     this.cursorSync = new CursorSync(sendFn, this.username, color);
@@ -274,7 +375,7 @@ export class ClientSession implements vscode.Disposable {
       this.statusBar.setFollowing(following);
     });
 
-    this.fileOpsSync = new FileOpsSync(sendFn, false, wsFolder.uri.fsPath, ignored);
+    this.fileOpsSync = new FileOpsSync(sendFn, false, "", ignored, this.vfsProvider);
     this.fileOpsSync.activate();
 
     this.terminalSync = new TerminalSync(sendFn, false);

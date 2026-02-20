@@ -3,7 +3,7 @@
   "displayName": "VSCode Pair Prog",
   "description": "Real-time peer-to-peer pair programming on a shared workspace.",
   "icon": "icon.png",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "publisher": "bjoernbosse",
   "repository": "https://github.com/FluffySpectre/vscode-pair-prog",
   "engines": {

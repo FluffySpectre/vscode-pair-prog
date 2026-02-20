@@ -6,7 +6,7 @@ import {
   FollowUpdatePayload,
   createMessage,
 } from "../network/protocol";
-import { toRelativePath } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
 
 /**
  * CursorSync broadcasts local cursor/selection changes and renders
@@ -174,7 +174,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   }
 
   private sendCursorUpdate(editor: vscode.TextEditor): void {
-    if (editor.document.uri.scheme !== "file") {
+    if (!isSyncableDocument(editor.document.uri)) {
       return;
     }
 
@@ -286,10 +286,9 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   }
 
   private async followRemoteCursor(payload: CursorUpdatePayload): Promise<void> {
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder || payload.cursors.length === 0) { return; }
+    if (payload.cursors.length === 0) { return; }
 
-    const targetUri = vscode.Uri.joinPath(wsFolder.uri, payload.filePath);
+    const targetUri = toAbsoluteUri(payload.filePath);
     const cursor = payload.cursors[0];
     const targetPos = new vscode.Position(cursor.position.line, cursor.position.character);
     const targetRange = new vscode.Range(targetPos, targetPos);
@@ -313,10 +312,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   }
 
   private updateFileTabDecoration(relativePath: string): void {
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder) { return; }
-
-    const newUri = vscode.Uri.joinPath(wsFolder.uri, relativePath);
+    const newUri = toAbsoluteUri(relativePath);
     const urisToRefresh: vscode.Uri[] = [];
 
     // Clear decoration from the old file so the badge is removed

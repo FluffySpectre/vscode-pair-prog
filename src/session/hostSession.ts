@@ -10,12 +10,15 @@ import {
   CursorUpdatePayload,
   FollowUpdatePayload,
   FileSaveRequestPayload,
+  FileContentRequestPayload,
+  FileContentResponsePayload,
   createMessage,
   WhiteboardStrokePayload,
   ChatMessagePayload,
   TerminalInputPayload,
   TerminalResizePayload,
 } from "../network/protocol";
+import { buildDirectoryTree } from "../vfs/directoryTreeBuilder";
 import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
@@ -138,13 +141,6 @@ export class HostSession implements vscode.Disposable {
       return;
     }
 
-    const hostFolderName = wsFolder.name;
-    if (hello.workspaceFolder !== hostFolderName) {
-      vscode.window.showWarningMessage(
-        `Client workspace "${hello.workspaceFolder}" differs from host "${hostFolderName}". Proceeding anyway.`
-      );
-    }
-
     this.statusBar.setHostConnected(this.address, this.clientUsername);
     vscode.window.showInformationMessage(
       `${this.clientUsername} connected to your session.`
@@ -155,6 +151,21 @@ export class HostSession implements vscode.Disposable {
     const openFiles = this.getOpenTextFiles();
     const welcome: WelcomePayload = { hostUsername: this.username, openFiles };
     this.server.send(createMessage(MessageType.Welcome, welcome));
+
+    // Send directory tree so the client can build its virtual workspace
+    const config = vscode.workspace.getConfiguration("pairprog");
+    const ignored = config.get<string[]>("ignoredPatterns") || [];
+    try {
+      const entries = await buildDirectoryTree(wsFolder.uri, ignored);
+      this.server.send(
+        createMessage(MessageType.DirectoryTree, {
+          entries,
+          workspaceName: wsFolder.name,
+        })
+      );
+    } catch (err) {
+      console.warn("[PairProg Host] Failed to build directory tree:", err);
+    }
 
     // Ensure ShareDB docs exist for all open files
     for (const filePath of openFiles) {
@@ -200,6 +211,10 @@ export class HostSession implements vscode.Disposable {
         if (this.documentSync) {
           await this.documentSync.handleFileSaveRequest(msg.payload as FileSaveRequestPayload);
         }
+        break;
+
+      case MessageType.FileContentRequest:
+        await this.handleFileContentRequest(msg.payload as FileContentRequestPayload);
         break;
 
       case MessageType.WhiteboardStroke:
@@ -284,6 +299,35 @@ export class HostSession implements vscode.Disposable {
 
     this.terminalSync?.dispose();
     this.terminalSync = null;
+  }
+
+  // File content serving
+
+  private async handleFileContentRequest(payload: FileContentRequestPayload): Promise<void> {
+    try {
+      const uri = toAbsoluteUri(payload.filePath);
+      const rawBytes = await vscode.workspace.fs.readFile(uri);
+
+      // Try to decode as UTF-8; fall back to base64 for binary files
+      let content: string;
+      let encoding: "utf8" | "base64";
+      try {
+        content = new TextDecoder("utf-8", { fatal: true }).decode(rawBytes);
+        encoding = "utf8";
+      } catch {
+        content = Buffer.from(rawBytes).toString("base64");
+        encoding = "base64";
+      }
+
+      const response: FileContentResponsePayload = {
+        filePath: payload.filePath,
+        content,
+        encoding,
+      };
+      this.server.send(createMessage(MessageType.FileContentResponse, response));
+    } catch (err) {
+      console.warn(`[PairProg Host] Failed to read file ${payload.filePath}:`, err);
+    }
   }
 
   // Utilities

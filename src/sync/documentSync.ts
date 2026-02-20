@@ -6,7 +6,8 @@ import {
   FileSavedPayload,
   createMessage,
 } from "../network/protocol";
-import { toRelativePath, toAbsoluteUri } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
+import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 
 /**
  * DocumentSync handles file save delegation.
@@ -18,10 +19,12 @@ export class DocumentSync implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
+  private vfsProvider?: PairProgFileSystemProvider;
 
-  constructor(sendFn: (msg: Message) => void, isHost: boolean) {
+  constructor(sendFn: (msg: Message) => void, isHost: boolean, vfsProvider?: PairProgFileSystemProvider) {
     this.sendFn = sendFn;
     this.isHost = isHost;
+    this.vfsProvider = vfsProvider;
   }
 
   activate(): void {
@@ -29,7 +32,7 @@ export class DocumentSync implements vscode.Disposable {
     if (!this.isHost) {
       this.disposables.push(
         vscode.workspace.onWillSaveTextDocument((e) => {
-          if (e.document.uri.scheme !== "file") {
+          if (!isSyncableDocument(e.document.uri)) {
             return;
           }
           const filePath = toRelativePath(e.document.uri);
@@ -74,6 +77,13 @@ export class DocumentSync implements vscode.Disposable {
 
   async handleFileSaved(payload: FileSavedPayload): Promise<void> {
     const uri = toAbsoluteUri(payload.filePath);
+
+    // For VFS documents, fire a change event to clear the dirty state
+    if (this.vfsProvider) {
+      this.vfsProvider.fireChanged(payload.filePath);
+      return;
+    }
+
     try {
       await vscode.commands.executeCommand("workbench.action.files.revert", uri);
     } catch {

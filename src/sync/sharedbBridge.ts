@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { Connection, Doc } from "sharedb/lib/client";
 import { type as otText } from "ot-text";
-import { toRelativePath, toAbsoluteUri } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
 
 type OtTextSkip = number;
 type OtTextInsert = string;
@@ -35,7 +35,7 @@ export class ShareDBBridge implements vscode.Disposable {
     // Auto-create/subscribe ShareDB docs when files are opened mid-session
     this.disposables.push(
       vscode.workspace.onDidOpenTextDocument((doc) => {
-        if (doc.uri.scheme !== "file") {
+        if (!isSyncableDocument(doc.uri)) {
           return;
         }
         const filePath = toRelativePath(doc.uri);
@@ -109,7 +109,7 @@ export class ShareDBBridge implements vscode.Disposable {
       return;
     }
 
-    if (e.document.uri.scheme !== "file") {
+    if (!isSyncableDocument(e.document.uri)) {
       return;
     }
 

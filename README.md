@@ -13,9 +13,9 @@ Real-time peer-to-peer pair programming on a shared workspace.
 
 ### Join a Session
 
-1. Open the **same workspace** (same repo, same branch)
+1. Open a workspace with at least an empty folder. IMPORTANT: An empty workspace is not supported at the moment!
 2. Run command: **PairProg: Join Session**
-3. Enter the host's address
+3. The extension scans your LAN for active sessions - select a discovered session or enter the host's address manually (e.g., `192.168.1.5:9876`)
 4. You're connected - edits sync in real-time. Wohooo!
 
 ## How It Works
@@ -24,16 +24,14 @@ Real-time peer-to-peer pair programming on a shared workspace.
 ┌──────────────┐     WebSocket (LAN)     ┌──────────────┐
 │     HOST     │<----------------------->│    CLIENT    │
 │              │                         │              │
-│  Source of   │  -- Edit (client->host) │  Sends edits │
-│  truth for   │  -- Edit confirmed -->  │  to host,    │
-│  all files   │  -- FullSync -------->  │  receives    │
-│              │  -- CursorUpdate <--->  │  confirmed   │
-│              │  -- ChatMessage  <--->  │  state back  │
-│  Files saved │  -- FileCreated ----->  │              │
-│  to disk     │  -- FileDeleted ----->  │              │
-│  HERE only   │  -- FileRenamed ----->  │  No disk     │
-│              │                         │  writes for  │
-│              │                         │  text edits  │
+│  Source of   │  <-- ShareDB OT  ---->  │  Edits sync  │
+│  truth for   │  -- CursorUpdate <--->  │  via OT in   │
+│  all files   │  -- ChatMessage  <--->  │  real-time   │
+│              │  -- FileCreated ----->  │              │
+│  Files saved │  -- FileDeleted ----->  │              │
+│  to disk     │  -- FileRenamed ----->  │  No disk     │
+│  HERE only   │  <-- FileSaveRequest    │  writes for  │
+│              │  -- FileSaved  ------>  │  text edits  │
 └──────────────┘                         └──────────────┘
 ```
 

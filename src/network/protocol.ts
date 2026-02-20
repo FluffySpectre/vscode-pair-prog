@@ -31,6 +31,11 @@ export enum MessageType {
   TerminalClosed = "terminalClosed",
   TerminalUnshared = "terminalUnshared",
   TerminalReadonlyChanged = "terminalReadonlyChanged",
+  
+  // Virtual workspace
+  DirectoryTree = "directoryTree",
+  FileContentRequest = "fileContentRequest",
+  FileContentResponse = "fileContentResponse",
 
   // Lifecycle
   Ping = "ping",
@@ -158,6 +163,30 @@ export interface TerminalReadonlyChangedPayload {
 export interface ErrorPayload {
   message: string;
   code?: string;
+}
+
+// Virtual workspace payloads
+
+export interface DirectoryTreeEntry {
+  path: string;
+  type: "file" | "directory";
+  size: number;
+  mtime: number;
+}
+
+export interface DirectoryTreePayload {
+  entries: DirectoryTreeEntry[];
+  workspaceName: string;
+}
+
+export interface FileContentRequestPayload {
+  filePath: string;
+}
+
+export interface FileContentResponsePayload {
+  filePath: string;
+  content: string;
+  encoding: "utf8" | "base64";
 }
 
 // Beacon (UDP discovery)

@@ -4,18 +4,38 @@ import { ClientSession } from "./session/clientSession";
 import { StatusBar } from "./ui/statusBar";
 import { AboutPanel } from "./ui/aboutPanel";
 import { BeaconListener, DiscoveredSession } from "./network/beacon";
+import { PairProgFileSystemProvider } from "./vfs/pairProgFileSystemProvider";
+
+const VFS_SCHEME = "pairprog";
 
 let hostSession: HostSession | null = null;
 let clientSession: ClientSession | null = null;
 let statusBar: StatusBar;
+let vfsProvider: PairProgFileSystemProvider;
 
 // Activate
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("[PairProg] Extension activated");
 
+  // Register VFS provider singleton
+  vfsProvider = new PairProgFileSystemProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider(VFS_SCHEME, vfsProvider, { isCaseSensitive: true })
+  );
+
   statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
+
+  // Check for pending reconnect (extension was reloaded after adding first workspace folder)
+  const pending = context.globalState.get<{ address: string }>("pairprog.pendingReconnect");
+  if (pending) {
+    context.globalState.update("pairprog.pendingReconnect", undefined);
+    autoReconnect(pending.address, context);
+  } else {
+    // Only clean up stale VFS when there's no pending reconnect
+    cleanupStaleVfs();
+  }
 
   // Start Hosting
 
@@ -83,13 +103,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (hostSession?.isActive) {
         vscode.window.showWarningMessage(
           "You are currently hosting a session. Stop it first."
-        );
-        return;
-      }
-
-      if (!vscode.workspace.workspaceFolders?.length) {
-        vscode.window.showErrorMessage(
-          "Open a workspace folder before joining a pair programming session."
         );
         return;
       }
@@ -171,7 +184,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!address) { return; }
 
       try {
-        clientSession = new ClientSession(statusBar, context);
+        clientSession = new ClientSession(statusBar, context, vfsProvider);
         await clientSession.connect(address);
       } catch (err: any) {
         vscode.window.showErrorMessage(
@@ -357,9 +370,37 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
+// Auto-reconnect after extension reload
+
+async function autoReconnect(address: string, context: vscode.ExtensionContext): Promise<void> {
+  try {
+    clientSession = new ClientSession(statusBar, context, vfsProvider);
+    await clientSession.connect(address);
+  } catch (err: any) {
+    console.warn("[PairProg] Auto-reconnect failed:", err.message);
+    clientSession?.dispose();
+    clientSession = null;
+    cleanupStaleVfs();
+  }
+}
+
+// Stale VFS cleanup
+
+function cleanupStaleVfs(): void {
+  const folders = vscode.workspace.workspaceFolders || [];
+  const vfsIndex = folders.findIndex((f) => f.uri.scheme === VFS_SCHEME);
+  if (vfsIndex !== -1) {
+    vscode.workspace.updateWorkspaceFolders(vfsIndex, 1);
+  }
+}
+
 // Deactivate
 
 export function deactivate() {
+  // Do NOT call cleanupStaleVfs() here - if we're being reloaded after
+  // adding the first workspace folder, we need the VFS folder to persist
+  // so auto-reconnect can use it.
+
   hostSession?.dispose();
   hostSession = null;
 

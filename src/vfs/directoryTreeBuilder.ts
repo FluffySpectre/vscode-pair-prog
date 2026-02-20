@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { DirectoryTreeEntry } from "../network/protocol";
+import { isIgnoredByPatterns } from "../utils/globUtils";
 
 /**
  * Recursively walks a workspace folder and returns a flat list of entries
@@ -31,7 +32,7 @@ async function walkDirectory(
     const childUri = vscode.Uri.joinPath(dirUri, name);
     const relativePath = childUri.path.slice(rootUri.path.length + 1);
 
-    if (isIgnored(relativePath, ignoredPatterns)) {
+    if (isIgnoredByPatterns(relativePath, ignoredPatterns)) {
       continue;
     }
 
@@ -51,18 +52,3 @@ async function walkDirectory(
   }
 }
 
-function isIgnored(relativePath: string, patterns: string[]): boolean {
-  return patterns.some((p) => simpleGlobMatch(p, relativePath));
-}
-
-function simpleGlobMatch(pattern: string, filePath: string): boolean {
-  if (pattern.endsWith("/**")) {
-    const prefix = pattern.slice(0, -3);
-    return filePath.startsWith(prefix + "/") || filePath === prefix;
-  }
-  if (pattern.startsWith("*.")) {
-    const ext = pattern.slice(1);
-    return filePath.endsWith(ext);
-  }
-  return filePath === pattern;
-}

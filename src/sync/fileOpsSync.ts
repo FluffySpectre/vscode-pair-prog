@@ -8,6 +8,7 @@ import {
   createMessage,
 } from "../network/protocol";
 import { toRelativePathFromRoot, toAbsoluteUri } from "../utils/pathUtils";
+import { isIgnoredByPatterns } from "../utils/globUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 
 /**
@@ -178,25 +179,7 @@ export class FileOpsSync implements vscode.Disposable {
   // Glob Matching
 
   private isIgnored(relativePath: string): boolean {
-    return this.ignoredPatterns.some((p) => this.simpleGlobMatch(p, relativePath));
-  }
-
-  /**
-   * Very simple glob matcher supporting:
-   *  - `dir/**` matches anything under that directory
-   *  - `*.ext` matches files with a given extension
-   *  - exact string match as fallback
-   */
-  private simpleGlobMatch(pattern: string, filePath: string): boolean {
-    if (pattern.endsWith("/**")) {
-      const prefix = pattern.slice(0, -3);
-      return filePath.startsWith(prefix + "/") || filePath === prefix;
-    }
-    if (pattern.startsWith("*.")) {
-      const ext = pattern.slice(1); // e.g., ".lock"
-      return filePath.endsWith(ext);
-    }
-    return filePath === pattern;
+    return isIgnoredByPatterns(relativePath, this.ignoredPatterns);
   }
 
   // Dispose

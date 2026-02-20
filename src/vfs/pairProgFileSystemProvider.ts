@@ -78,12 +78,19 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
   applyFileRenamed(oldRelativePath: string, newRelativePath: string): void {
     const oldPath = "/" + oldRelativePath;
     const newPath = "/" + newRelativePath;
+    const childPrefix = oldPath + "/";
 
-    const entry = this.tree.get(oldPath);
-    if (entry) {
-      this.tree.delete(oldPath);
-      this.ensureParentDirs(newPath);
-      this.tree.set(newPath, entry);
+    const toMove: [string, TreeEntry][] = [];
+    for (const [entryPath, entry] of this.tree) {
+      if (entryPath === oldPath || entryPath.startsWith(childPrefix)) {
+        toMove.push([entryPath, entry]);
+      }
+    }
+
+    for (const [entryPath, entry] of toMove) {
+      this.tree.delete(entryPath);
+      const newEntryPath = newPath + entryPath.slice(oldPath.length);
+      this.tree.set(newEntryPath, entry);
     }
 
     this._onDidChangeFile.fire([

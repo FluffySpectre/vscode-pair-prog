@@ -151,28 +151,19 @@ export class ClientSession implements vscode.Disposable {
     this.vfsProvider.setContentRequester((path) => this.requestFileContent(path));
     this.vfsProvider.populateTree(payload.entries);
 
-    // DELETEME
-    // const alreadyHasFolder = (vscode.workspace.workspaceFolders || [])
-    //   .some((f) => f.uri.scheme === VFS_SCHEME);
+    // Add the virtual workspace folder so the client can browse remote files in the explorer
+    const alreadyHasFolder = (vscode.workspace.workspaceFolders || [])
+      .some((f) => f.uri.scheme === VFS_SCHEME);
 
-    // if (!alreadyHasFolder) {
-    //   // Save reconnect info BEFORE adding folder - if this is the first workspace folder,
-    //   // VS Code will reload the extension host. The pending reconnect allows auto-recovery.
-    //   this._context.globalState.update("pairprog.pendingReconnect", { address: this.address });
+    if (!alreadyHasFolder) {
+      const wsUri = vscode.Uri.parse(`${VFS_SCHEME}:/${payload.workspaceName}`);
+      const numFolders = vscode.workspace.workspaceFolders?.length || 0;
 
-    //   const wsUri = vscode.Uri.parse(`${VFS_SCHEME}:/${payload.workspaceName}`);
-    //   const numFolders = vscode.workspace.workspaceFolders?.length || 0;
-
-    //   // Add at end to avoid changing the first folder when user already has folders open
-    //   // (changing the first folder always triggers an extension reload)
-    //   vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
-    //     uri: wsUri,
-    //     name: `Remote: ${payload.workspaceName}`,
-    //   });
-    // }
-    // // If we reach here, no extension reload happened (user had existing folders,
-    // // or VFS folder was already present from a previous connection / auto-reconnect)
-    // this._context.globalState.update("pairprog.pendingReconnect", undefined);
+      vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
+        uri: wsUri,
+        name: `Remote: ${payload.workspaceName}`,
+      });
+    }
 
     this.setupSync();
 
@@ -222,9 +213,23 @@ export class ClientSession implements vscode.Disposable {
     }
     this.pendingContentRequests.clear();
 
-    // DELETEME
-    // Clear pending reconnect state
-    // this._context.globalState.update("pairprog.pendingReconnect", undefined);
+    // Close all editor tabs that belong to the virtual filesystem
+    const vfsTabs: vscode.Tab[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const input = tab.input;
+        if (input instanceof vscode.TabInputText && input.uri.scheme === VFS_SCHEME) {
+          vfsTabs.push(tab);
+        } else if (input instanceof vscode.TabInputTextDiff) {
+          if (input.original.scheme === VFS_SCHEME || input.modified.scheme === VFS_SCHEME) {
+            vfsTabs.push(tab);
+          }
+        }
+      }
+    }
+    if (vfsTabs.length > 0) {
+      vscode.window.tabGroups.close(vfsTabs);
+    }
 
     // Remove the virtual workspace folder
     const folders = vscode.workspace.workspaceFolders || [];

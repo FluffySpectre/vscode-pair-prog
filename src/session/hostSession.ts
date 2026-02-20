@@ -21,6 +21,7 @@ import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
+import { TerminalSync } from "../sync/terminalSync";
 import { StatusBar } from "../ui/statusBar";
 import { WhiteboardPanel } from "../ui/whiteboardPanel";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
@@ -40,6 +41,7 @@ export class HostSession implements vscode.Disposable {
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
+  private terminalSync: TerminalSync | null = null;
   private statusBar: StatusBar;
   private whiteboard?: WhiteboardPanel;
   private disposables: vscode.Disposable[] = [];
@@ -261,6 +263,8 @@ export class HostSession implements vscode.Disposable {
 
     this.fileOpsSync = new FileOpsSync(sendFn, true, wsFolder.uri.fsPath, ignored);
     this.fileOpsSync.activate();
+
+    this.terminalSync = new TerminalSync(sendFn);
   }
 
   private teardownSync(): void {
@@ -275,6 +279,9 @@ export class HostSession implements vscode.Disposable {
 
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
+
+    this.terminalSync?.dispose();
+    this.terminalSync = null;
   }
 
   // File content serving
@@ -355,6 +362,32 @@ export class HostSession implements vscode.Disposable {
         );
       }
     );
+  }
+
+  async shareTerminal(): Promise<void> {
+    if (!this.terminalSync) {
+      vscode.window.showWarningMessage("No client connected yet.");
+      return;
+    }
+    if (this.terminalSync.isSharing) {
+      vscode.window.showInformationMessage("Already sharing a terminal.");
+      return;
+    }
+    const started = await this.terminalSync.startSharing();
+    if (started) {
+      vscode.window.showInformationMessage(
+        "Terminal output is now being shared with the client."
+      );
+    }
+  }
+
+  stopSharingTerminal(): void {
+    if (!this.terminalSync?.isSharing) {
+      vscode.window.showWarningMessage("No terminal is currently being shared.");
+      return;
+    }
+    this.terminalSync.stopSharing();
+    vscode.window.showInformationMessage("Terminal sharing stopped.");
   }
 
   get isActive(): boolean {

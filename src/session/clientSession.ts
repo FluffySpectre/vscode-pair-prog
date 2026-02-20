@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as ws from "ws";
+import * as os from "os";
 import { PairProgClient } from "../network/client";
 import {
   Message,
@@ -18,6 +19,7 @@ import {
   createMessage,
   WhiteboardStrokePayload,
   ChatMessagePayload,
+  TerminalOutputPayload,
 } from "../network/protocol";
 import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
@@ -63,6 +65,8 @@ export class ClientSession implements vscode.Disposable {
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
   private pendingContentRequests = new Map<string, (content: Uint8Array) => void>();
+  private terminalOutput: vscode.OutputChannel | null = null;
+  private terminalOutputName: string = "";
 
   constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider) {
     this.statusBar = statusBar;
@@ -164,6 +168,8 @@ export class ClientSession implements vscode.Disposable {
         name: `Remote: ${payload.workspaceName}`,
       });
     }
+
+    await this.fixTerminalCwd();
 
     this.setupSync();
 
@@ -303,8 +309,76 @@ export class ClientSession implements vscode.Disposable {
         );
         break;
 
+      case MessageType.TerminalOutput:
+        this.handleTerminalOutput(msg.payload as TerminalOutputPayload);
+        break;
+
+      case MessageType.TerminalClear:
+        this.handleTerminalClear();
+        break;
+
       default:
         break;
+    }
+  }
+
+  // Terminal output from host
+
+  private static readonly TERMINAL_CWD_KEY = "pairprog.prevTerminalCwd";
+  private static readonly TERMINAL_CWD_UNSET = "pairprog:unset";
+
+  private async fixTerminalCwd(): Promise<void> {
+    const config = vscode.workspace.getConfiguration("terminal.integrated");
+    const prev = config.inspect<string>("cwd")?.globalValue;
+
+    // Persist the previous value across extension reloads
+    await this._context.globalState.update(
+      ClientSession.TERMINAL_CWD_KEY,
+      prev !== undefined ? prev : ClientSession.TERMINAL_CWD_UNSET
+    );
+
+    if (prev !== os.homedir()) {
+      try {
+        await config.update("cwd", os.homedir(), vscode.ConfigurationTarget.Global);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private async restoreTerminalCwd(): Promise<void> {
+    const stored = this._context.globalState.get<string>(ClientSession.TERMINAL_CWD_KEY);
+    if (stored === undefined) { return; } // We never changed it
+
+    try {
+      const config = vscode.workspace.getConfiguration("terminal.integrated");
+      const restoreValue = stored === ClientSession.TERMINAL_CWD_UNSET ? undefined : stored;
+      await config.update("cwd", restoreValue, vscode.ConfigurationTarget.Global);
+    } catch {
+      // ignore
+    }
+    await this._context.globalState.update(ClientSession.TERMINAL_CWD_KEY, undefined);
+  }
+
+  private handleTerminalOutput(payload: TerminalOutputPayload): void {
+    // Create or re-create the output channel when the terminal name changes
+    if (!this.terminalOutput || this.terminalOutputName !== payload.terminalName) {
+      this.terminalOutput?.dispose();
+      this.terminalOutputName = payload.terminalName;
+      this.terminalOutput = vscode.window.createOutputChannel(
+        `PairProg Terminal: ${payload.terminalName}`,
+        "ansi"
+      );
+      this.terminalOutput.show(/* preserveFocus */ true);
+    }
+    this.terminalOutput.append(payload.data);
+  }
+
+  private handleTerminalClear(): void {
+    if (this.terminalOutput) {
+      this.terminalOutput.appendLine(
+        "\n\u2500\u2500\u2500 Terminal sharing ended \u2500\u2500\u2500"
+      );
     }
   }
 
@@ -363,6 +437,12 @@ export class ClientSession implements vscode.Disposable {
 
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
+
+    this.terminalOutput?.dispose();
+    this.terminalOutput = null;
+    this.terminalOutputName = "";
+
+    this.restoreTerminalCwd();
   }
 
   // Utilities

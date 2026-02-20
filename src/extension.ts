@@ -250,6 +250,30 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Share Terminal (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.shareTerminal", async () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage("Terminal sharing is only available to the host.");
+        return;
+      }
+      await hostSession.shareTerminal();
+    })
+  );
+
+  // Stop Sharing Terminal (host only)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.stopSharingTerminal", () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage("No active hosting session.");
+        return;
+      }
+      hostSession.stopSharingTerminal();
+    })
+  );
+
   // About
 
   context.subscriptions.push(
@@ -269,6 +293,8 @@ export function activate(context: vscode.ExtensionContext) {
           { label: "$(eye) Toggle Follow Mode", description: "" },
           { label: "$(edit) Open Whiteboard", description: "" },
           { label: "$(comment) Send Message", description: "" },
+          { label: "$(terminal) Share Terminal", description: "" },
+          { label: "$(terminal-kill) Stop Sharing Terminal", description: "" },
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(info) About", description: "" },
           { label: "$(debug-stop) Stop Hosting", description: "" },
@@ -301,6 +327,10 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.executeCommand("pairprog.openWhiteboard");
       } else if (picked.label.includes("Send Message")) {
         vscode.commands.executeCommand("pairprog.sendMessage");
+      } else if (picked.label.includes("Stop Sharing Terminal")) {
+        vscode.commands.executeCommand("pairprog.stopSharingTerminal");
+      } else if (picked.label.includes("Share Terminal")) {
+        vscode.commands.executeCommand("pairprog.shareTerminal");
       } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");

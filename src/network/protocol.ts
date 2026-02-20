@@ -23,6 +23,10 @@ export enum MessageType {
   // Chat
   ChatMessage = "chatMessage",
 
+  // Terminal sharing
+  TerminalOutput = "terminalOutput",
+  TerminalClear = "terminalClear",
+
   // Virtual workspace
   DirectoryTree = "directoryTree",
   FileContentRequest = "fileContentRequest",
@@ -113,6 +117,13 @@ export interface ChatMessagePayload {
   text: string;
   username: string;
 }
+
+export interface TerminalOutputPayload {
+  data: string; // raw terminal data
+  terminalName: string;
+}
+
+export interface TerminalClearPayload {}
 
 export interface ErrorPayload {
   message: string;

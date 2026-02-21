@@ -2,8 +2,8 @@
  * Tests whether a file path matches a simple glob pattern.
  *
  * Supported patterns:
- *  - `dir/**`  — matches anything under that directory
- *  - `*.ext`   — matches files with a given extension
+ *  - `dir/**` - matches anything under that directory
+ *  - `*.ext`  - matches files with a given extension
  *  - exact string match as fallback
  */
 export function simpleGlobMatch(pattern: string, filePath: string): boolean {

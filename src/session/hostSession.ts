@@ -44,7 +44,6 @@ export class HostSession implements vscode.Disposable {
   private terminalSync: TerminalSync | null = null;
   private statusBar: StatusBar;
   private whiteboard?: WhiteboardPanel;
-  private disposables: vscode.Disposable[] = [];
 
   private username: string;
   private address: string = "";
@@ -398,6 +397,5 @@ export class HostSession implements vscode.Disposable {
 
   dispose(): void {
     this.stop();
-    this.disposables.forEach((d) => d.dispose());
   }
 }

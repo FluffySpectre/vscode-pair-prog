@@ -97,7 +97,7 @@ export class TerminalSync implements vscode.Disposable {
       if (t === this.sharedTerminal) {
         this.stopSharing();
         vscode.window.showInformationMessage(
-          "Shared terminal was closed — terminal sharing stopped."
+          "Shared terminal was closed - terminal sharing stopped."
         );
       }
     });

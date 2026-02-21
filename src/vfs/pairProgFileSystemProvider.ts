@@ -12,18 +12,36 @@ interface TreeEntry {
  * Backed entirely by WebSocket messages - no local files are created.
  *
  * The host sends a DirectoryTree on connection. File contents are lazy-loaded
- * via `contentRequester` when a file is opened. Real-time edits flow through
- * ShareDB; this provider only handles the initial read and Explorer tree.
+ * on demand when a file is opened. Real-time edits flow through ShareDB;
+ * this provider only handles the initial read and Explorer tree.
  */
 export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
+  static readonly SCHEME = "pairprog";
+
   private tree = new Map<string, TreeEntry>();
-  private contentRequester: ((path: string) => Promise<Uint8Array>) | null = null;
+  private requestSender: ((path: string) => void) | null = null;
+  private pendingContentRequests = new Map<string, (content: Uint8Array) => void>();
 
   private _onDidChangeFile = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
   readonly onDidChangeFile = this._onDidChangeFile.event;
 
-  setContentRequester(fn: (path: string) => Promise<Uint8Array>): void {
-    this.contentRequester = fn;
+  setRequestSender(fn: (path: string) => void): void {
+    this.requestSender = fn;
+  }
+
+  handleContentResponse(payload: { filePath: string; content: string; encoding: string }): void {
+    const resolver = this.pendingContentRequests.get(payload.filePath);
+    if (!resolver) { return; }
+    this.pendingContentRequests.delete(payload.filePath);
+
+    let content: Uint8Array;
+    if (payload.encoding === "base64") {
+      content = Uint8Array.from(Buffer.from(payload.content, "base64"));
+    } else {
+      content = new TextEncoder().encode(payload.content);
+    }
+
+    resolver(content);
   }
 
   // Tree management
@@ -118,7 +136,43 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
 
   clear(): void {
     this.tree.clear();
-    this.contentRequester = null;
+    this.requestSender = null;
+  }
+
+  teardown(): void {
+    // Resolve any pending content requests
+    for (const resolver of this.pendingContentRequests.values()) {
+      resolver(new Uint8Array(0));
+    }
+    this.pendingContentRequests.clear();
+
+    // Close all editor tabs that belong to this VFS
+    const vfsTabs: vscode.Tab[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const input = tab.input;
+        if (input instanceof vscode.TabInputText && input.uri.scheme === PairProgFileSystemProvider.SCHEME) {
+          vfsTabs.push(tab);
+        } else if (input instanceof vscode.TabInputTextDiff) {
+          if (input.original.scheme === PairProgFileSystemProvider.SCHEME || input.modified.scheme === PairProgFileSystemProvider.SCHEME) {
+            vfsTabs.push(tab);
+          }
+        }
+      }
+    }
+    if (vfsTabs.length > 0) {
+      vscode.window.tabGroups.close(vfsTabs);
+    }
+
+    // Remove the VFS workspace folder
+    const folders = vscode.workspace.workspaceFolders || [];
+    const vfsIndex = folders.findIndex((f) => f.uri.scheme === PairProgFileSystemProvider.SCHEME);
+    if (vfsIndex !== -1) {
+      vscode.workspace.updateWorkspaceFolders(vfsIndex, 1);
+    }
+
+    // Clear internal state
+    this.clear();
   }
 
   // FileSystemProvider implementation
@@ -172,9 +226,9 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
     }
 
     // Lazy-load from host
-    if (this.contentRequester) {
+    if (this.requestSender) {
       const relativePath = entryPath.slice(1); // remove leading /
-      const content = await this.contentRequester(relativePath);
+      const content = await this.requestContent(relativePath);
       entry.content = content;
       entry.size = content.length;
       return content;
@@ -249,11 +303,26 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
 
   private pathToUri(normalizedPath: string): vscode.Uri {
     const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder || wsFolder.uri.scheme !== "pairprog") {
+    if (!wsFolder || wsFolder.uri.scheme !== PairProgFileSystemProvider.SCHEME) {
       // Fallback - shouldn't happen in normal flow
-      return vscode.Uri.parse("pairprog:/" + normalizedPath);
+      return vscode.Uri.parse(PairProgFileSystemProvider.SCHEME + ":/" + normalizedPath);
     }
     return vscode.Uri.joinPath(wsFolder.uri, normalizedPath);
+  }
+
+  private requestContent(relativePath: string): Promise<Uint8Array> {
+    return new Promise<Uint8Array>((resolve) => {
+      this.pendingContentRequests.set(relativePath, resolve);
+      this.requestSender!(relativePath);
+
+      // Timeout after 10 seconds to avoid hanging forever
+      setTimeout(() => {
+        if (this.pendingContentRequests.has(relativePath)) {
+          this.pendingContentRequests.delete(relativePath);
+          resolve(new Uint8Array(0));
+        }
+      }, 10000);
+    });
   }
 
   private ensureParentDirs(filePath: string): void {
@@ -272,6 +341,10 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
   }
 
   dispose(): void {
+    for (const resolver of this.pendingContentRequests.values()) {
+      resolver(new Uint8Array(0));
+    }
+    this.pendingContentRequests.clear();
     this._onDidChangeFile.dispose();
     this.clear();
   }

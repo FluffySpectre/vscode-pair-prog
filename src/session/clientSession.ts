@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import * as ws from "ws";
-import * as os from "os";
 import { PairProgClient } from "../network/client";
 import {
   Message,
@@ -27,6 +26,7 @@ import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { StatusBar } from "../ui/statusBar";
 import { WhiteboardPanel } from "../ui/whiteboardPanel";
+import { RemoteTerminalOutput } from "../ui/remoteTerminalOutput";
 import { getSystemUsername } from "../utils/pathUtils";
 import { showChatMessage, promptAndSendMessage } from "../utils/chatUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
@@ -35,8 +35,6 @@ import { type as otText } from "ot-text";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ShareDBClient = require("sharedb/lib/client");
 ShareDBClient.types.register(otText);
-
-const VFS_SCHEME = "pairprog";
 
 /**
  * ClientSession manages the client-side lifecycle:
@@ -53,9 +51,9 @@ export class ClientSession implements vscode.Disposable {
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
+  private remoteTerminalOutput: RemoteTerminalOutput | null = null;
   private statusBar: StatusBar;
   private whiteboard?: WhiteboardPanel;
-  private disposables: vscode.Disposable[] = [];
 
   private username: string;
   private address: string = "";
@@ -64,9 +62,6 @@ export class ClientSession implements vscode.Disposable {
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
-  private pendingContentRequests = new Map<string, (content: Uint8Array) => void>();
-  private terminalOutput: vscode.OutputChannel | null = null;
-  private terminalOutputName: string = "";
 
   constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider) {
     this.statusBar = statusBar;
@@ -96,7 +91,7 @@ export class ClientSession implements vscode.Disposable {
 
   disconnect(): void {
     this.teardownSync();
-    this.teardownVfs();
+    this.vfsProvider.teardown();
     this.client.disconnect();
     this.statusBar.setDisconnected();
     vscode.window.showInformationMessage("Disconnected from pair programming session.");
@@ -144,7 +139,7 @@ export class ClientSession implements vscode.Disposable {
 
   private onDisconnected(): void {
     this.teardownSync();
-    this.teardownVfs();
+    this.vfsProvider.teardown();
     this.statusBar.setDisconnected();
     vscode.window.showWarningMessage("Disconnected from pair programming session.");
   }
@@ -152,15 +147,21 @@ export class ClientSession implements vscode.Disposable {
   // Virtual Filesystem Setup
 
   private async onDirectoryTree(payload: DirectoryTreePayload): Promise<void> {
-    this.vfsProvider.setContentRequester((path) => this.requestFileContent(path));
+    this.vfsProvider.setRequestSender((path) => {
+      this.client.send(
+        createMessage(MessageType.FileContentRequest, {
+          filePath: path,
+        } as FileContentRequestPayload)
+      );
+    });
     this.vfsProvider.populateTree(payload.entries);
 
     // Add the virtual workspace folder so the client can browse remote files in the explorer
     const alreadyHasFolder = (vscode.workspace.workspaceFolders || [])
-      .some((f) => f.uri.scheme === VFS_SCHEME);
+      .some((f) => f.uri.scheme === PairProgFileSystemProvider.SCHEME);
 
     if (!alreadyHasFolder) {
-      const wsUri = vscode.Uri.parse(`${VFS_SCHEME}:/${payload.workspaceName}`);
+      const wsUri = vscode.Uri.parse(`${PairProgFileSystemProvider.SCHEME}:/${payload.workspaceName}`);
       const numFolders = vscode.workspace.workspaceFolders?.length || 0;
 
       vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
@@ -169,83 +170,12 @@ export class ClientSession implements vscode.Disposable {
       });
     }
 
-    await this.fixTerminalCwd();
+    this.remoteTerminalOutput = new RemoteTerminalOutput(this._context.globalState);
+    await this.remoteTerminalOutput.fixTerminalCwd();
 
     this.setupSync();
 
     this.cursorSync!.sendCurrentCursor();
-  }
-
-  private requestFileContent(relativePath: string): Promise<Uint8Array> {
-    return new Promise<Uint8Array>((resolve) => {
-      this.pendingContentRequests.set(relativePath, resolve);
-      this.client.send(
-        createMessage(MessageType.FileContentRequest, {
-          filePath: relativePath,
-        } as FileContentRequestPayload)
-      );
-
-      // Timeout after 10 seconds to avoid hanging forever
-      setTimeout(() => {
-        if (this.pendingContentRequests.has(relativePath)) {
-          this.pendingContentRequests.delete(relativePath);
-          resolve(new Uint8Array(0));
-        }
-      }, 10000);
-    });
-  }
-
-  private onFileContentResponse(payload: FileContentResponsePayload): void {
-    const resolver = this.pendingContentRequests.get(payload.filePath);
-    if (!resolver) {
-      return;
-    }
-    this.pendingContentRequests.delete(payload.filePath);
-
-    let content: Uint8Array;
-    if (payload.encoding === "base64") {
-      content = Uint8Array.from(Buffer.from(payload.content, "base64"));
-    } else {
-      content = new TextEncoder().encode(payload.content);
-    }
-
-    resolver(content);
-  }
-
-  private teardownVfs(): void {
-    // Resolve any pending content requests to avoid hanging promises
-    for (const resolver of this.pendingContentRequests.values()) {
-      resolver(new Uint8Array(0));
-    }
-    this.pendingContentRequests.clear();
-
-    // Close all editor tabs that belong to the virtual filesystem
-    const vfsTabs: vscode.Tab[] = [];
-    for (const group of vscode.window.tabGroups.all) {
-      for (const tab of group.tabs) {
-        const input = tab.input;
-        if (input instanceof vscode.TabInputText && input.uri.scheme === VFS_SCHEME) {
-          vfsTabs.push(tab);
-        } else if (input instanceof vscode.TabInputTextDiff) {
-          if (input.original.scheme === VFS_SCHEME || input.modified.scheme === VFS_SCHEME) {
-            vfsTabs.push(tab);
-          }
-        }
-      }
-    }
-    if (vfsTabs.length > 0) {
-      vscode.window.tabGroups.close(vfsTabs);
-    }
-
-    // Remove the virtual workspace folder
-    const folders = vscode.workspace.workspaceFolders || [];
-    const vfsIndex = folders.findIndex((f) => f.uri.scheme === VFS_SCHEME);
-    if (vfsIndex !== -1) {
-      vscode.workspace.updateWorkspaceFolders(vfsIndex, 1);
-    }
-
-    // Clear the VFS provider state
-    this.vfsProvider.clear();
   }
 
   // Message Router
@@ -257,7 +187,7 @@ export class ClientSession implements vscode.Disposable {
         break;
 
       case MessageType.FileContentResponse:
-        this.onFileContentResponse(msg.payload as FileContentResponsePayload);
+        this.vfsProvider.handleContentResponse(msg.payload as FileContentResponsePayload);
         break;
 
       case MessageType.CursorUpdate:
@@ -310,75 +240,15 @@ export class ClientSession implements vscode.Disposable {
         break;
 
       case MessageType.TerminalOutput:
-        this.handleTerminalOutput(msg.payload as TerminalOutputPayload);
+        this.remoteTerminalOutput?.handleOutput(msg.payload as TerminalOutputPayload);
         break;
 
       case MessageType.TerminalClear:
-        this.handleTerminalClear();
+        this.remoteTerminalOutput?.handleClear();
         break;
 
       default:
         break;
-    }
-  }
-
-  // Terminal output from host
-
-  private static readonly TERMINAL_CWD_KEY = "pairprog.prevTerminalCwd";
-  private static readonly TERMINAL_CWD_UNSET = "pairprog:unset";
-
-  private async fixTerminalCwd(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("terminal.integrated");
-    const prev = config.inspect<string>("cwd")?.globalValue;
-
-    // Persist the previous value across extension reloads
-    await this._context.globalState.update(
-      ClientSession.TERMINAL_CWD_KEY,
-      prev !== undefined ? prev : ClientSession.TERMINAL_CWD_UNSET
-    );
-
-    if (prev !== os.homedir()) {
-      try {
-        await config.update("cwd", os.homedir(), vscode.ConfigurationTarget.Global);
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  private async restoreTerminalCwd(): Promise<void> {
-    const stored = this._context.globalState.get<string>(ClientSession.TERMINAL_CWD_KEY);
-    if (stored === undefined) { return; } // We never changed it
-
-    try {
-      const config = vscode.workspace.getConfiguration("terminal.integrated");
-      const restoreValue = stored === ClientSession.TERMINAL_CWD_UNSET ? undefined : stored;
-      await config.update("cwd", restoreValue, vscode.ConfigurationTarget.Global);
-    } catch {
-      // ignore
-    }
-    await this._context.globalState.update(ClientSession.TERMINAL_CWD_KEY, undefined);
-  }
-
-  private handleTerminalOutput(payload: TerminalOutputPayload): void {
-    // Create or re-create the output channel when the terminal name changes
-    if (!this.terminalOutput || this.terminalOutputName !== payload.terminalName) {
-      this.terminalOutput?.dispose();
-      this.terminalOutputName = payload.terminalName;
-      this.terminalOutput = vscode.window.createOutputChannel(
-        `PairProg Terminal: ${payload.terminalName}`,
-        "ansi"
-      );
-      this.terminalOutput.show(/* preserveFocus */ true);
-    }
-    this.terminalOutput.append(payload.data);
-  }
-
-  private handleTerminalClear(): void {
-    if (this.terminalOutput) {
-      this.terminalOutput.appendLine(
-        "\n\u2500\u2500\u2500 Terminal sharing ended \u2500\u2500\u2500"
-      );
     }
   }
 
@@ -438,11 +308,8 @@ export class ClientSession implements vscode.Disposable {
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
 
-    this.terminalOutput?.dispose();
-    this.terminalOutput = null;
-    this.terminalOutputName = "";
-
-    this.restoreTerminalCwd();
+    this.remoteTerminalOutput?.dispose();
+    this.remoteTerminalOutput = null;
   }
 
   // Utilities
@@ -489,6 +356,5 @@ export class ClientSession implements vscode.Disposable {
 
   dispose(): void {
     this.disconnect();
-    this.disposables.forEach((d) => d.dispose());
   }
 }

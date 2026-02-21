@@ -1,6 +1,7 @@
 import {
   Message,
   MessageType,
+  WhiteboardEntity,
   WhiteboardEntityAddPayload,
   WhiteboardEntityUpdatePayload,
   WhiteboardEntityDeletePayload,
@@ -22,41 +23,57 @@ export class WhiteboardFeature implements Feature {
 
   private context?: FeatureContext;
   private panel?: WhiteboardPanel;
+  private entities: Map<string, WhiteboardEntity> = new Map();
 
   activate(context: FeatureContext): void {
     this.context = context;
-    // If host reconnects and panel already has entities, send full sync to new client
-    if (context.role === "host" && this.panel && !this.panel.disposed) {
-      const entities = this.panel.getEntities();
-      if (entities.length > 0) {
-        context.sendFn(createMessage(MessageType.WhiteboardFullSync, { entities }));
-      }
+    // If the host reconnects and entities exist (panel may or may not be open),
+    // send a full sync so the newly-connected client gets the current board state.
+    if (context.role === "host" && this.entities.size > 0) {
+      const entities = Array.from(this.entities.values());
+      context.sendFn(createMessage(MessageType.WhiteboardFullSync, { entities }));
     }
   }
 
   handleMessage(msg: Message): void {
     switch (msg.type) {
-      case MessageType.WhiteboardEntityAdd:
+      case MessageType.WhiteboardEntityAdd: {
+        const payload = msg.payload as WhiteboardEntityAddPayload;
+        // Keep the feature-level store authoritative
+        this.entities.set(payload.entity.id, payload.entity);
         this.ensurePanel();
-        this.panel?.handleRemoteEntityAdd(msg.payload as WhiteboardEntityAddPayload);
+        this.panel?.handleRemoteEntityAdd(payload);
         break;
+      }
 
-      case MessageType.WhiteboardEntityUpdate:
+      case MessageType.WhiteboardEntityUpdate: {
+        const payload = msg.payload as WhiteboardEntityUpdatePayload;
+        const existing = this.entities.get(payload.id);
+        if (existing) { Object.assign(existing, payload.changes); }
         this.ensurePanel();
-        this.panel?.handleRemoteEntityUpdate(msg.payload as WhiteboardEntityUpdatePayload);
+        this.panel?.handleRemoteEntityUpdate(payload);
         break;
+      }
 
-      case MessageType.WhiteboardEntityDelete:
+      case MessageType.WhiteboardEntityDelete: {
+        const payload = msg.payload as WhiteboardEntityDeletePayload;
+        this.entities.delete(payload.id);
         this.ensurePanel();
-        this.panel?.handleRemoteEntityDelete(msg.payload as WhiteboardEntityDeletePayload);
+        this.panel?.handleRemoteEntityDelete(payload);
         break;
+      }
 
-      case MessageType.WhiteboardFullSync:
+      case MessageType.WhiteboardFullSync: {
+        const payload = msg.payload as WhiteboardFullSyncPayload;
+        this.entities.clear();
+        for (const e of payload.entities) { this.entities.set(e.id, e); }
         this.ensurePanel();
-        this.panel?.handleRemoteFullSync(msg.payload as WhiteboardFullSyncPayload);
+        this.panel?.handleRemoteFullSync(payload);
         break;
+      }
 
       case MessageType.WhiteboardClear:
+        this.entities.clear();
         this.panel?.handleRemoteClear();
         break;
     }
@@ -80,6 +97,7 @@ export class WhiteboardFeature implements Feature {
   }
 
   dispose(): void {
+    this.entities.clear();
     this.panel = undefined;
     this.context = undefined;
   }
@@ -91,7 +109,8 @@ export class WhiteboardFeature implements Feature {
     if (!this.panel || this.panel.disposed) {
       this.panel = new WhiteboardPanel(
         this.context.extensionContext,
-        this.context.sendFn
+        this.context.sendFn,
+        this.entities
       );
     }
   }

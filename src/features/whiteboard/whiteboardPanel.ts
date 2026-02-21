@@ -17,13 +17,15 @@ export class WhiteboardPanel {
   private panel: vscode.WebviewPanel;
   private sendFn: (msg: Message) => void;
   private _disposed = false;
-  private entities: Map<string, WhiteboardEntity> = new Map();
+  private entities: Map<string, WhiteboardEntity>;
 
   constructor(
     context: vscode.ExtensionContext,
-    sendFn: (msg: Message) => void
+    sendFn: (msg: Message) => void,
+    entities: Map<string, WhiteboardEntity>
   ) {
     this.sendFn = sendFn;
+    this.entities = entities;
 
     this.panel = vscode.window.createWebviewPanel(
       "pairprogWhiteboard",
@@ -111,33 +113,22 @@ export class WhiteboardPanel {
   }
 
   handleRemoteEntityAdd(payload: WhiteboardEntityAddPayload) {
-    this.entities.set(payload.entity.id, payload.entity);
     this.panel.webview.postMessage({ type: "entityAdd", payload });
   }
 
   handleRemoteEntityUpdate(payload: WhiteboardEntityUpdatePayload) {
-    const existing = this.entities.get(payload.id);
-    if (existing) {
-      Object.assign(existing, payload.changes);
-    }
     this.panel.webview.postMessage({ type: "entityUpdate", payload });
   }
 
   handleRemoteEntityDelete(payload: WhiteboardEntityDeletePayload) {
-    this.entities.delete(payload.id);
     this.panel.webview.postMessage({ type: "entityDelete", payload });
   }
 
   handleRemoteFullSync(payload: WhiteboardFullSyncPayload) {
-    this.entities.clear();
-    for (const e of payload.entities) {
-      this.entities.set(e.id, e);
-    }
     this.panel.webview.postMessage({ type: "fullSync", payload });
   }
 
   handleRemoteClear() {
-    this.entities.clear();
     this.panel.webview.postMessage({ type: "clear" });
   }
 

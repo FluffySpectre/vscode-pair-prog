@@ -171,6 +171,9 @@ export class PairProgClient extends EventEmitter {
             const errorPayload = msg.payload as { message: string; code?: string };
             if (errorPayload.code === "AUTH_FAILED" || errorPayload.code === "VERSION_MISMATCH") {
               this.intentionalDisconnect = true;
+              this.stopReconnect();
+              this.stopHeartbeat();
+              this.socket?.close();
             }
             this.emit("error", new Error(errorPayload.message));
             break;

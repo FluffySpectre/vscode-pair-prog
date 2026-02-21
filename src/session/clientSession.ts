@@ -90,6 +90,7 @@ export class ClientSession implements vscode.Disposable {
   // Disconnect
 
   disconnect(): void {
+    this._context.globalState.update("pairprog.pendingReconnect", undefined);
     this.teardownSync();
     this.vfsProvider.teardown();
     this.client.disconnect();
@@ -138,6 +139,7 @@ export class ClientSession implements vscode.Disposable {
   // Disconnected
 
   private onDisconnected(): void {
+    this._context.globalState.update("pairprog.pendingReconnect", undefined);
     this.teardownSync();
     this.vfsProvider.teardown();
     this.statusBar.setDisconnected();
@@ -163,6 +165,8 @@ export class ClientSession implements vscode.Disposable {
     if (!alreadyHasFolder) {
       const wsUri = vscode.Uri.parse(`${PairProgFileSystemProvider.SCHEME}:/${payload.workspaceName}`);
       const numFolders = vscode.workspace.workspaceFolders?.length || 0;
+
+      await this._context.globalState.update("pairprog.pendingReconnect", { address: this.address });
 
       vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
         uri: wsUri,

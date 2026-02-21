@@ -12,10 +12,12 @@ let hostSession: HostSession | null = null;
 let clientSession: ClientSession | null = null;
 let statusBar: StatusBar;
 let vfsProvider: PairProgFileSystemProvider;
+let extensionContext: vscode.ExtensionContext;
 
 // Activate
 
 export function activate(context: vscode.ExtensionContext) {
+  extensionContext = context;
   console.log("[PairProg] Extension activated");
 
   // Register VFS provider singleton
@@ -376,15 +378,16 @@ function cleanupStaleVfs(): void {
 // Deactivate
 
 export function deactivate() {
-  // Do NOT call cleanupStaleVfs() here - if we're being reloaded after
-  // adding the first workspace folder, we need the VFS folder to persist
-  // so auto-reconnect can use it.
-
   hostSession?.dispose();
   hostSession = null;
 
-  clientSession?.dispose();
-  clientSession = null;
+  const pending = extensionContext?.globalState.get("pairprog.pendingReconnect");
+  if (pending) {
+    clientSession = null;
+  } else {
+    clientSession?.dispose();
+    clientSession = null;
+  }
 
   statusBar?.dispose();
 }

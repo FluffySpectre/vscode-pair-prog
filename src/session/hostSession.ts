@@ -52,6 +52,8 @@ export class HostSession implements vscode.Disposable {
   private isStopping = false;
   private _sendFn?: (msg: Message) => void;
   private _context: vscode.ExtensionContext;
+  private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly DISCONNECT_GRACE_MS = 6000;
 
   constructor(statusBar: StatusBar, context: vscode.ExtensionContext) {
     this.statusBar = statusBar;
@@ -113,6 +115,10 @@ export class HostSession implements vscode.Disposable {
 
   stop(): void {
     this.isStopping = true;
+    if (this.disconnectGraceTimer) {
+      clearTimeout(this.disconnectGraceTimer);
+      this.disconnectGraceTimer = null;
+    }
     this.teardownSync();
     this.sharedbServer?.stop();
     this.sharedbServer = null;
@@ -126,6 +132,11 @@ export class HostSession implements vscode.Disposable {
   // Client Connected
 
   private async onClientConnected(hello: HelloPayload): Promise<void> {
+    if (this.disconnectGraceTimer) {
+      clearTimeout(this.disconnectGraceTimer);
+      this.disconnectGraceTimer = null;
+    }
+
     this.clientUsername = hello.username || "Anonymous";
 
     const wsFolder = vscode.workspace.workspaceFolders?.[0];
@@ -186,10 +197,13 @@ export class HostSession implements vscode.Disposable {
     }
     this.teardownSync();
     this.statusBar.setHosting(this.address);
-    vscode.window.showInformationMessage(
-      `${this.clientUsername || "Client"} disconnected.`
-    );
+
+    const disconnectedUser = this.clientUsername || "Client";
     this.clientUsername = "";
+    this.disconnectGraceTimer = setTimeout(() => {
+      this.disconnectGraceTimer = null;
+      vscode.window.showInformationMessage(`${disconnectedUser} disconnected.`);
+    }, this.DISCONNECT_GRACE_MS);
   }
 
   // Message Router

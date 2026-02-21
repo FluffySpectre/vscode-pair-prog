@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { Connection, Doc } from "sharedb/lib/client";
 import { type as otText } from "ot-text";
 import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
+import { RemoteOpGuard } from "./remoteOpGuard";
 
 type OtTextSkip = number;
 type OtTextInsert = string;
@@ -15,7 +16,7 @@ type OtTextOp = OtTextComponent[];
 export class ShareDBBridge implements vscode.Disposable {
   private connection: Connection;
   private docs: Map<string, Doc<string>> = new Map();
-  private readonly pendingRemoteEdits = new Set<string>();
+  private readonly remoteOpGuard = new RemoteOpGuard();
   private disposables: vscode.Disposable[] = [];
   private pendingOps: Map<string, OtTextOp> = new Map();
   private batchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -118,7 +119,7 @@ export class ShareDBBridge implements vscode.Disposable {
       return;
     }
 
-    if (this.pendingRemoteEdits.has(filePath)) {
+    if (this.remoteOpGuard.isActive(filePath)) {
       return;
     }
 
@@ -232,12 +233,7 @@ export class ShareDBBridge implements vscode.Disposable {
       }
     }
 
-    this.pendingRemoteEdits.add(filePath);
-    try {
-      await vscode.workspace.applyEdit(workspaceEdit);
-    } finally {
-      this.pendingRemoteEdits.delete(filePath);
-    }
+    await this.remoteOpGuard.run(filePath, () => vscode.workspace.applyEdit(workspaceEdit));
   }
 
   // Sync local VS Code document to match ShareDB document content. Used when client first subscribes to a document.
@@ -267,12 +263,7 @@ export class ShareDBBridge implements vscode.Disposable {
     const edit = new vscode.WorkspaceEdit();
     edit.replace(uri, fullRange, sharedbContent);
 
-    this.pendingRemoteEdits.add(filePath);
-    try {
-      await vscode.workspace.applyEdit(edit);
-    } finally {
-      this.pendingRemoteEdits.delete(filePath);
-    }
+    await this.remoteOpGuard.run(filePath, () => vscode.workspace.applyEdit(edit));
   }
 
   dispose(): void {

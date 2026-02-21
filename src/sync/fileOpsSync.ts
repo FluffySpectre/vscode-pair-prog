@@ -10,6 +10,7 @@ import {
 import { toRelativePathFromRoot, toAbsoluteUri } from "../utils/pathUtils";
 import { isIgnoredByPatterns } from "../utils/globUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
+import { RemoteOpGuard } from "./remoteOpGuard";
 
 /**
  * FileOpsSync watches for file create/delete/rename events on the host
@@ -21,7 +22,7 @@ export class FileOpsSync implements vscode.Disposable {
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
   private workspaceRoot: string;
-  private readonly pendingRemoteOps = new Set<string>();
+  private readonly remoteOpGuard = new RemoteOpGuard();
   private ignoredPatterns: string[];
   private vfsProvider?: PairProgFileSystemProvider;
 
@@ -52,7 +53,7 @@ export class FileOpsSync implements vscode.Disposable {
       vscode.workspace.onDidCreateFiles((e) => {
         for (const file of e.files) {
           const relativePath = toRelativePathFromRoot(file, this.workspaceRoot);
-          if (!relativePath || this.pendingRemoteOps.has(relativePath)) { continue; }
+          if (!relativePath || this.remoteOpGuard.isActive(relativePath)) { continue; }
           this.onFileCreated(file);
         }
       })
@@ -63,7 +64,7 @@ export class FileOpsSync implements vscode.Disposable {
       vscode.workspace.onDidDeleteFiles((e) => {
         for (const file of e.files) {
           const relativePath = toRelativePathFromRoot(file, this.workspaceRoot);
-          if (!relativePath || this.pendingRemoteOps.has(relativePath)) { continue; }
+          if (!relativePath || this.remoteOpGuard.isActive(relativePath)) { continue; }
           this.onFileDeleted(file);
         }
       })
@@ -75,8 +76,8 @@ export class FileOpsSync implements vscode.Disposable {
         for (const { oldUri, newUri } of e.files) {
           const oldPath = toRelativePathFromRoot(oldUri, this.workspaceRoot);
           const newPath = toRelativePathFromRoot(newUri, this.workspaceRoot);
-          if ((oldPath && this.pendingRemoteOps.has(oldPath)) ||
-              (newPath && this.pendingRemoteOps.has(newPath))) { continue; }
+          if ((oldPath && this.remoteOpGuard.isActive(oldPath)) ||
+              (newPath && this.remoteOpGuard.isActive(newPath))) { continue; }
           this.onFileRenamed(oldUri, newUri);
         }
       })
@@ -141,8 +142,7 @@ export class FileOpsSync implements vscode.Disposable {
 
     // Fallback: write to disk (legacy behavior)
     const uri = toAbsoluteUri(payload.filePath);
-    this.pendingRemoteOps.add(payload.filePath);
-    try {
+    await this.remoteOpGuard.run(payload.filePath, async () => {
       if (payload.isDirectory) {
         await vscode.workspace.fs.createDirectory(uri);
       } else {
@@ -155,9 +155,7 @@ export class FileOpsSync implements vscode.Disposable {
         const content = Buffer.from(payload.content, "utf-8");
         await vscode.workspace.fs.writeFile(uri, content);
       }
-    } finally {
-      this.pendingRemoteOps.delete(payload.filePath);
-    }
+    });
   }
 
   async handleFileDeleted(payload: FileDeletedPayload): Promise<void> {
@@ -168,14 +166,13 @@ export class FileOpsSync implements vscode.Disposable {
 
     // Fallback: delete from disk (legacy behavior)
     const uri = toAbsoluteUri(payload.filePath);
-    this.pendingRemoteOps.add(payload.filePath);
-    try {
-      await vscode.workspace.fs.delete(uri, { recursive: false });
-    } catch {
-      // File might not exist locally - that's fine
-    } finally {
-      this.pendingRemoteOps.delete(payload.filePath);
-    }
+    await this.remoteOpGuard.run(payload.filePath, async () => {
+      try {
+        await vscode.workspace.fs.delete(uri, { recursive: false });
+      } catch {
+        // File might not exist locally - that's fine
+      }
+    });
   }
 
   async handleFileRenamed(payload: FileRenamedPayload): Promise<void> {
@@ -190,19 +187,16 @@ export class FileOpsSync implements vscode.Disposable {
       return;
     }
 
-    // Fallback: rename on disk (legacy behavior)
+    // Fallback: rename on disk
     const oldUri = toAbsoluteUri(payload.oldPath);
     const newUri = toAbsoluteUri(payload.newPath);
-    this.pendingRemoteOps.add(payload.oldPath);
-    this.pendingRemoteOps.add(payload.newPath);
-    try {
-      await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
-    } catch {
-      // Source might not exist locally - skip
-    } finally {
-      this.pendingRemoteOps.delete(payload.oldPath);
-      this.pendingRemoteOps.delete(payload.newPath);
-    }
+    await this.remoteOpGuard.run([payload.oldPath, payload.newPath], async () => {
+      try {
+        await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
+      } catch {
+        // Source might not exist locally - skip
+      }
+    });
   }
 
   private async saveDirtyTabs(tabs: vscode.Tab[]): Promise<void> {

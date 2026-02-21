@@ -96,6 +96,10 @@ let resizeAnchor = null;
 let resizeStartBounds = null;
 let resizeStartEntity = null;
 
+// Copy/paste state
+let clipboard = null;
+let pasteOffset = 0;
+
 const HANDLE_SIZE = 8;
 const HIT_TOLERANCE = 6;
 const MIN_SIZE = 10;
@@ -751,6 +755,35 @@ document.addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     savePng();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    if (selectedId && entities.has(selectedId)) {
+      clipboard = JSON.parse(JSON.stringify(entities.get(selectedId)));
+      pasteOffset = 0;
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+    e.preventDefault();
+    if (!clipboard) return;
+    pasteOffset += 16;
+    const pasted = JSON.parse(JSON.stringify(clipboard));
+    pasted.id = crypto.randomUUID();
+    if (pasted.type === "line" || pasted.type === "arrow") {
+      pasted.x1 += pasteOffset; pasted.y1 += pasteOffset;
+      pasted.x2 += pasteOffset; pasted.y2 += pasteOffset;
+      pasted.x  += pasteOffset; pasted.y  += pasteOffset;
+    } else {
+      pasted.x += pasteOffset;
+      pasted.y += pasteOffset;
+    }
+    entities.set(pasted.id, pasted);
+    selectedId = pasted.id;
+    setTool("select");
+    vscode.postMessage({ type: "entityAdd", payload: { entity: pasted } });
+    redrawAll();
     return;
   }
   switch (e.key.toLowerCase()) {

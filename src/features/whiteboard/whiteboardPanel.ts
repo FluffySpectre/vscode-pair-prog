@@ -7,7 +7,7 @@ import {
   MessageType,
   WhiteboardStrokePayload,
   createMessage,
-} from "../network/protocol";
+} from "../../network/protocol";
 
 export class WhiteboardPanel {
   private panel: vscode.WebviewPanel;

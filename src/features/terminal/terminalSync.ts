@@ -5,11 +5,9 @@ import {
   TerminalOutputPayload,
   TerminalClearPayload,
   createMessage,
-} from "../network/protocol";
+} from "../../network/protocol";
 
-/**
- * TerminalSync lets the host stream command output from a terminal to the client
- */
+// TerminalSync lets the host stream command output from a terminal to the client
 export class TerminalSync implements vscode.Disposable {
   private sendFn: (msg: Message) => void;
   private sharedTerminal: vscode.Terminal | null = null;

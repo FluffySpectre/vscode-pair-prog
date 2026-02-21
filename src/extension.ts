@@ -5,6 +5,13 @@ import { StatusBar } from "./ui/statusBar";
 import { AboutPanel } from "./ui/aboutPanel";
 import { BeaconListener, DiscoveredSession } from "./network/beacon";
 import { PairProgFileSystemProvider } from "./vfs/pairProgFileSystemProvider";
+import {
+  FeatureRegistry,
+  WhiteboardFeature,
+  ChatFeature,
+  TerminalFeature,
+  SessionRole,
+} from "./features";
 
 const VFS_SCHEME = "pairprog";
 
@@ -13,6 +20,7 @@ let clientSession: ClientSession | null = null;
 let statusBar: StatusBar;
 let vfsProvider: PairProgFileSystemProvider;
 let extensionContext: vscode.ExtensionContext;
+let featureRegistry: FeatureRegistry;
 
 // Activate
 
@@ -28,6 +36,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
+
+  // Create feature registry and register all optional features
+  featureRegistry = new FeatureRegistry();
+  featureRegistry.register(new WhiteboardFeature());
+  featureRegistry.register(new ChatFeature());
+  featureRegistry.register(new TerminalFeature());
 
   // Check for pending reconnect (extension was reloaded after adding first workspace folder)
   const pending = context.globalState.get<{ address: string }>("pairprog.pendingReconnect");
@@ -65,7 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        hostSession = new HostSession(statusBar, context);
+        hostSession = new HostSession(statusBar, context, featureRegistry);
         await hostSession.start();
       } catch (err: any) {
         vscode.window.showErrorMessage(
@@ -186,7 +200,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!address) { return; }
 
       try {
-        clientSession = new ClientSession(statusBar, context, vfsProvider);
+        clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
         await clientSession.connect(address);
       } catch (err: any) {
         vscode.window.showErrorMessage(
@@ -226,55 +240,17 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Open Whiteboard
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("pairprog.openWhiteboard", () => {
-      if (hostSession?.isActive) {
-        hostSession.openWhiteboard();
-      } else if (clientSession?.isActive) {
-        clientSession.openWhiteboard();
-      }
-    })
-  );
-
-  // Send Message
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("pairprog.sendMessage", async () => {
-      if (hostSession?.isActive) {
-        await hostSession.sendMessage();
-      } else if (clientSession?.isActive) {
-        await clientSession.sendMessage();
-      } else {
-        vscode.window.showWarningMessage("No active pair programming session.");
-      }
-    })
-  );
-
-  // Share Terminal (host only)
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("pairprog.shareTerminal", async () => {
-      if (!hostSession?.isActive) {
-        vscode.window.showWarningMessage("Terminal sharing is only available to the host.");
-        return;
-      }
-      await hostSession.shareTerminal();
-    })
-  );
-
-  // Stop Sharing Terminal (host only)
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("pairprog.stopSharingTerminal", () => {
-      if (!hostSession?.isActive) {
-        vscode.window.showWarningMessage("No active hosting session.");
-        return;
-      }
-      hostSession.stopSharingTerminal();
-    })
-  );
+  for (const cmd of featureRegistry.getCommands()) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(cmd.commandId, async () => {
+        if (!hostSession?.isActive && !clientSession?.isActive) {
+          vscode.window.showWarningMessage("No active pair programming session.");
+          return;
+        }
+        await cmd.execute();
+      })
+    );
+  }
 
   // About
 
@@ -293,10 +269,14 @@ export function activate(context: vscode.ExtensionContext) {
       if (hostSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
-          { label: "$(edit) Open Whiteboard", description: "" },
-          { label: "$(comment) Send Message", description: "" },
-          { label: "$(terminal) Share Terminal", description: "" },
-          { label: "$(terminal-kill) Stop Sharing Terminal", description: "" },
+        );
+
+        // Add feature items for host role
+        for (const cmd of featureRegistry.getCommands("host" as SessionRole)) {
+          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: "" });
+        }
+
+        items.push(
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(info) About", description: "" },
           { label: "$(debug-stop) Stop Hosting", description: "" },
@@ -304,8 +284,14 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (clientSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
-          { label: "$(edit) Open Whiteboard", description: "" },
-          { label: "$(comment) Send Message", description: "" },
+        );
+
+        // Add feature items for client role
+        for (const cmd of featureRegistry.getCommands("client" as SessionRole)) {
+          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: "" });
+        }
+
+        items.push(
           { label: "$(info) About", description: "" },
           { label: "$(debug-disconnect) Disconnect", description: "" },
         );
@@ -323,16 +309,9 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (!picked) { return; }
 
+      // Check core commands first
       if (picked.label.includes("Toggle Follow Mode")) {
         vscode.commands.executeCommand("pairprog.toggleFollowMode");
-      } else if (picked.label.includes("Open Whiteboard")) {
-        vscode.commands.executeCommand("pairprog.openWhiteboard");
-      } else if (picked.label.includes("Send Message")) {
-        vscode.commands.executeCommand("pairprog.sendMessage");
-      } else if (picked.label.includes("Stop Sharing Terminal")) {
-        vscode.commands.executeCommand("pairprog.stopSharingTerminal");
-      } else if (picked.label.includes("Share Terminal")) {
-        vscode.commands.executeCommand("pairprog.shareTerminal");
       } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");
@@ -346,6 +325,14 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.executeCommand("pairprog.joinSession");
       } else if (picked.label.includes("About")) {
         vscode.commands.executeCommand("pairprog.openAbout");
+      } else {
+        // Check feature commands dynamically
+        const featureCmd = featureRegistry.getCommands().find(
+          (cmd) => picked.label.includes(cmd.label)
+        );
+        if (featureCmd) {
+          vscode.commands.executeCommand(featureCmd.commandId);
+        }
       }
     })
   );
@@ -355,7 +342,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function autoReconnect(address: string, context: vscode.ExtensionContext): Promise<void> {
   try {
-    clientSession = new ClientSession(statusBar, context, vfsProvider);
+    clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
     await clientSession.connect(address);
   } catch (err: any) {
     console.warn("[PairProg] Auto-reconnect failed:", err.message);
@@ -389,5 +376,6 @@ export function deactivate() {
     clientSession = null;
   }
 
+  featureRegistry?.disposeAll();
   statusBar?.dispose();
 }

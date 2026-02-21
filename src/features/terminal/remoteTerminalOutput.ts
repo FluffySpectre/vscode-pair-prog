@@ -1,13 +1,8 @@
 import * as vscode from "vscode";
 import * as os from "os";
-import { TerminalOutputPayload } from "../network/protocol";
+import { TerminalOutputPayload } from "../../network/protocol";
 
-/**
- * Manages the client-side terminal during a pair programming session.
- *
- * - Fixes the terminal CWD so new terminals don't open in the VFS path
- * - Displays streamed terminal output from the host in an output channel
- */
+// Manages the client-side terminal during a pair programming session
 export class RemoteTerminalOutput implements vscode.Disposable {
   private static readonly TERMINAL_CWD_KEY = "pairprog.prevTerminalCwd";
   private static readonly TERMINAL_CWD_UNSET = "pairprog:unset";

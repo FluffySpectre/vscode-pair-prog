@@ -16,20 +16,15 @@ import {
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
-  WhiteboardStrokePayload,
-  ChatMessagePayload,
-  TerminalOutputPayload,
 } from "../network/protocol";
 import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { StatusBar } from "../ui/statusBar";
-import { WhiteboardPanel } from "../ui/whiteboardPanel";
-import { RemoteTerminalOutput } from "../ui/remoteTerminalOutput";
 import { getSystemUsername, toAbsoluteUri } from "../utils/pathUtils";
-import { showChatMessage, promptAndSendMessage } from "../utils/chatUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
+import { FeatureRegistry } from "../features";
 import { type as otText } from "ot-text";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -51,22 +46,21 @@ export class ClientSession implements vscode.Disposable {
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
-  private remoteTerminalOutput: RemoteTerminalOutput | null = null;
   private statusBar: StatusBar;
-  private whiteboard?: WhiteboardPanel;
+  private featureRegistry: FeatureRegistry;
 
   private username: string;
   private address: string = "";
   private hostUsername: string = "";
-  private _sendFn?: (msg: Message) => void;
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider) {
+  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider, featureRegistry: FeatureRegistry) {
     this.statusBar = statusBar;
     this._context = context;
     this.vfsProvider = vfsProvider;
+    this.featureRegistry = featureRegistry;
     this.client = new PairProgClient();
 
     const config = vscode.workspace.getConfiguration("pairprog");
@@ -174,10 +168,7 @@ export class ClientSession implements vscode.Disposable {
       });
     }
 
-    this.remoteTerminalOutput = new RemoteTerminalOutput(this._context.globalState);
-    await this.remoteTerminalOutput.fixTerminalCwd();
-
-    this.setupSync();
+    await this.setupSync();
 
     this.cursorSync!.sendCurrentCursor();
 
@@ -244,45 +235,20 @@ export class ClientSession implements vscode.Disposable {
         }
         break;
 
-      case MessageType.WhiteboardStroke:
-        this.ensureWhiteboard();
-        this.whiteboard?.handleRemoteStroke(msg.payload as WhiteboardStrokePayload);
-        break;
-
-      case MessageType.WhiteboardClear:
-        this.whiteboard?.handleRemoteClear();
-        break;
-
-      case MessageType.ChatMessage:
-        await showChatMessage(
-          msg.payload as ChatMessagePayload,
-          this.hostUsername || "Host",
-          () => this.sendMessage()
-        );
-        break;
-
-      case MessageType.TerminalOutput:
-        this.remoteTerminalOutput?.handleOutput(msg.payload as TerminalOutputPayload);
-        break;
-
-      case MessageType.TerminalClear:
-        this.remoteTerminalOutput?.handleClear();
-        break;
-
       default:
+        this.featureRegistry.routeMessage(msg);
         break;
     }
   }
 
   // Sync Setup / Teardown
 
-  private setupSync(): void {
+  private async setupSync(): Promise<void> {
     const config = vscode.workspace.getConfiguration("pairprog");
     const color = config.get<string>("highlightColor") || "#FF6B6B";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
     const sendFn = (msg: Message) => this.client.send(msg);
-    this._sendFn = sendFn;
 
     this.sharedbSocket = new ws.WebSocket(`ws://${this.address}/sharedb`, {
       perMessageDeflate: {
@@ -306,6 +272,14 @@ export class ClientSession implements vscode.Disposable {
 
     this.fileOpsSync = new FileOpsSync(sendFn, false, "", ignored, this.vfsProvider);
     this.fileOpsSync.activate();
+
+    await this.featureRegistry.activateAll({
+      sendFn,
+      role: "client",
+      username: this.username,
+      partnerUsername: this.hostUsername,
+      extensionContext: this._context,
+    });
   }
 
   private teardownSync(): void {
@@ -330,44 +304,13 @@ export class ClientSession implements vscode.Disposable {
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
 
-    this.remoteTerminalOutput?.dispose();
-    this.remoteTerminalOutput = null;
+    this.featureRegistry.deactivateAll();
   }
 
   // Utilities
 
   toggleFollowMode(): void {
     this.cursorSync?.toggleFollow();
-  }
-
-  private ensureWhiteboard(): void {
-    if (!this._sendFn) { return; }
-    if (!this.whiteboard || this.whiteboard.disposed) {
-      this.whiteboard = new WhiteboardPanel(this._context, this._sendFn);
-    }
-  }
-
-  openWhiteboard(): void {
-    this.ensureWhiteboard();
-    if (this.whiteboard && !this.whiteboard.disposed) {
-      this.whiteboard.reveal();
-    }
-  }
-
-  async sendMessage(): Promise<void> {
-    await promptAndSendMessage(
-      !!this._sendFn,
-      "Not connected to a session.",
-      this.hostUsername || "host",
-      (text) => {
-        this._sendFn!(
-          createMessage(MessageType.ChatMessage, {
-            text,
-            username: this.username,
-          } as ChatMessagePayload)
-        );
-      }
-    );
   }
 
   get isActive(): boolean {

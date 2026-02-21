@@ -15,7 +15,7 @@ export class StatusBar implements vscode.Disposable {
   private item: vscode.StatusBarItem;
   private state: ConnectionState = ConnectionState.Idle;
   private address: string = "";
-  private peerName: string = "";
+  private partnerName: string = "";
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(
@@ -40,7 +40,7 @@ export class StatusBar implements vscode.Disposable {
   setHostConnected(address: string, clientName: string): void {
     this.state = ConnectionState.Hosting;
     this.address = address;
-    this.peerName = clientName;
+    this.partnerName = clientName;
     this.item.text = `$(broadcast) Hosting: ${clientName} connected`;
     this.item.tooltip = `Pair Programming with ${clientName}.\nSession address: ${address}\nClick for options.`;
     this.item.backgroundColor = undefined;
@@ -50,7 +50,7 @@ export class StatusBar implements vscode.Disposable {
   setConnected(address: string, hostName: string): void {
     this.state = ConnectionState.Connected;
     this.address = address;
-    this.peerName = hostName;
+    this.partnerName = hostName;
     this.item.text = `$(plug) Connected to ${hostName}`;
     this.item.tooltip = `Connected to ${address}.\nPair Programming with ${hostName}.\nClick for options.`;
     this.item.backgroundColor = undefined;
@@ -59,14 +59,14 @@ export class StatusBar implements vscode.Disposable {
 
   setFollowing(following: boolean): void {
     if (following) {
-      this.item.text = `$(eye) Following ${this.peerName}`;
-      this.item.tooltip = `Following ${this.peerName}'s cursor.\nClick for options.`;
+      this.item.text = `$(eye) Following ${this.partnerName}`;
+      this.item.tooltip = `Following ${this.partnerName}'s cursor.\nClick for options.`;
     } else if (this.state === ConnectionState.Hosting) {
-      this.item.text = `$(broadcast) Hosting: ${this.peerName} connected`;
-      this.item.tooltip = `Pair Programming with ${this.peerName}.\nSession address: ${this.address}\nClick for options.`;
+      this.item.text = `$(broadcast) Hosting: ${this.partnerName} connected`;
+      this.item.tooltip = `Pair Programming with ${this.partnerName}.\nSession address: ${this.address}\nClick for options.`;
     } else if (this.state === ConnectionState.Connected) {
-      this.item.text = `$(plug) Connected to ${this.peerName}`;
-      this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.peerName}.\nClick for options.`;
+      this.item.text = `$(plug) Connected to ${this.partnerName}`;
+      this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.partnerName}.\nClick for options.`;
     }
   }
 

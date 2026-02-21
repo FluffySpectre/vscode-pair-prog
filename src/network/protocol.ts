@@ -42,7 +42,7 @@ export enum MessageType {
 // Base Message
 
 export interface Message<T = unknown> {
-  type: MessageType;
+  type: MessageType | string;
   seq: number;
   timestamp: number;
   payload: T;
@@ -170,7 +170,7 @@ export interface BeaconPayload {
 
 let _seqCounter = 0;
 
-export function createMessage<T>(type: MessageType, payload: T): Message<T> {
+export function createMessage<T>(type: MessageType | string, payload: T): Message<T> {
   return {
     type,
     seq: _seqCounter++,

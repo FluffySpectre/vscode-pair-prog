@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { ChatMessagePayload } from "../network/protocol";
+import { ChatMessagePayload } from "../../network/protocol";
 
 export async function showChatMessage(
   payload: ChatMessagePayload,

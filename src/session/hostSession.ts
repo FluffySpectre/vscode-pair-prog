@@ -13,19 +13,15 @@ import {
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
-  WhiteboardStrokePayload,
-  ChatMessagePayload,
 } from "../network/protocol";
 import { buildDirectoryTree } from "../vfs/directoryTreeBuilder";
 import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
-import { TerminalSync } from "../sync/terminalSync";
 import { StatusBar } from "../ui/statusBar";
-import { WhiteboardPanel } from "../ui/whiteboardPanel";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
-import { showChatMessage, promptAndSendMessage } from "../utils/chatUtils";
+import { FeatureRegistry } from "../features";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -41,23 +37,22 @@ export class HostSession implements vscode.Disposable {
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
-  private terminalSync: TerminalSync | null = null;
   private statusBar: StatusBar;
-  private whiteboard?: WhiteboardPanel;
+  private featureRegistry: FeatureRegistry;
 
   private username: string;
   private address: string = "";
   private clientUsername: string = "";
   private broadcaster: BeaconBroadcaster | null = null;
   private isStopping = false;
-  private _sendFn?: (msg: Message) => void;
   private _context: vscode.ExtensionContext;
   private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DISCONNECT_GRACE_MS = 6000;
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext) {
+  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, featureRegistry: FeatureRegistry) {
     this.statusBar = statusBar;
     this._context = context;
+    this.featureRegistry = featureRegistry;
     this.server = new PairProgServer();
 
     const config = vscode.workspace.getConfiguration("pairprog");
@@ -154,7 +149,7 @@ export class HostSession implements vscode.Disposable {
       `${this.clientUsername} connected to your session.`
     );
 
-    this.setupSync();
+    await this.setupSync();
 
     const openFiles = this.getOpenTextFiles();
     const welcome: WelcomePayload = { hostUsername: this.username, openFiles };
@@ -228,38 +223,21 @@ export class HostSession implements vscode.Disposable {
         await this.handleFileContentRequest(msg.payload as FileContentRequestPayload);
         break;
 
-      case MessageType.WhiteboardStroke:
-        this.ensureWhiteboard();
-        this.whiteboard?.handleRemoteStroke(msg.payload as WhiteboardStrokePayload);
-        break;
-
-      case MessageType.WhiteboardClear:
-        this.whiteboard?.handleRemoteClear();
-        break;
-
-      case MessageType.ChatMessage:
-        await showChatMessage(
-          msg.payload as ChatMessagePayload,
-          this.clientUsername || "Client",
-          () => this.sendMessage()
-        );
-        break;
-
       default:
+        this.featureRegistry.routeMessage(msg);
         break;
     }
   }
 
   // Sync Setup / Teardown
 
-  private setupSync(): void {
+  private async setupSync(): Promise<void> {
     const wsFolder = vscode.workspace.workspaceFolders![0];
     const config = vscode.workspace.getConfiguration("pairprog");
     const color = config.get<string>("highlightColor") || "#ec15ef";
     const ignored = config.get<string[]>("ignoredPatterns") || [];
 
     const sendFn = (msg: Message) => this.server.send(msg);
-    this._sendFn = sendFn;
 
     const sharedbConnection = this.sharedbServer!.getHostConnection();
     this.sharedbBridge = new ShareDBBridge(sharedbConnection);
@@ -277,7 +255,13 @@ export class HostSession implements vscode.Disposable {
     this.fileOpsSync = new FileOpsSync(sendFn, true, wsFolder.uri.fsPath, ignored);
     this.fileOpsSync.activate();
 
-    this.terminalSync = new TerminalSync(sendFn);
+    await this.featureRegistry.activateAll({
+      sendFn,
+      role: "host",
+      username: this.username,
+      partnerUsername: this.clientUsername,
+      extensionContext: this._context,
+    });
   }
 
   private teardownSync(): void {
@@ -293,8 +277,7 @@ export class HostSession implements vscode.Disposable {
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
 
-    this.terminalSync?.dispose();
-    this.terminalSync = null;
+    this.featureRegistry.deactivateAll();
   }
 
   // File content serving
@@ -345,62 +328,6 @@ export class HostSession implements vscode.Disposable {
 
   toggleFollowMode(): void {
     this.cursorSync?.toggleFollow();
-  }
-
-  private ensureWhiteboard(): void {
-    if (!this._sendFn) { return; }
-    if (!this.whiteboard || this.whiteboard.disposed) {
-      this.whiteboard = new WhiteboardPanel(this._context, this._sendFn);
-    }
-  }
-
-  openWhiteboard(): void {
-    this.ensureWhiteboard();
-    if (this.whiteboard && !this.whiteboard.disposed) {
-      this.whiteboard.reveal();
-    }
-  }
-
-  async sendMessage(): Promise<void> {
-    await promptAndSendMessage(
-      !!this._sendFn,
-      "No client connected yet.",
-      this.clientUsername || "client",
-      (text) => {
-        this._sendFn!(
-          createMessage(MessageType.ChatMessage, {
-            text,
-            username: this.username,
-          } as ChatMessagePayload)
-        );
-      }
-    );
-  }
-
-  async shareTerminal(): Promise<void> {
-    if (!this.terminalSync) {
-      vscode.window.showWarningMessage("No client connected yet.");
-      return;
-    }
-    if (this.terminalSync.isSharing) {
-      vscode.window.showInformationMessage("Already sharing a terminal.");
-      return;
-    }
-    const started = await this.terminalSync.startSharing();
-    if (started) {
-      vscode.window.showInformationMessage(
-        "Terminal output is now being shared with the client."
-      );
-    }
-  }
-
-  stopSharingTerminal(): void {
-    if (!this.terminalSync?.isSharing) {
-      vscode.window.showWarningMessage("No terminal is currently being shared.");
-      return;
-    }
-    this.terminalSync.stopSharing();
-    vscode.window.showInformationMessage("Terminal sharing stopped.");
   }
 
   get isActive(): boolean {

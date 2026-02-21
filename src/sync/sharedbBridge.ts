@@ -170,7 +170,14 @@ export class ShareDBBridge implements vscode.Disposable {
   private scheduleOp(filePath: string, doc: Doc<string>, op: OtTextOp): void {
     // Compose the new op onto any already-pending op for this file
     const existing = this.pendingOps.get(filePath);
-    this.pendingOps.set(filePath, existing ? otText.compose(existing, op) : op);
+    let composed: OtTextOp;
+    try {
+      composed = existing ? otText.compose(existing, op) : op;
+    } catch (err) {
+      console.error(`[PairProg] Failed to compose ops for ${filePath}, resetting to latest op:`, err);
+      composed = op;
+    }
+    this.pendingOps.set(filePath, composed);
 
     // Reset the flush timer
     const existingTimer = this.batchTimers.get(filePath);

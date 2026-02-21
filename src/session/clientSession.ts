@@ -112,7 +112,9 @@ export class ClientSession implements vscode.Disposable {
     });
 
     this.client.on("message", (msg: Message) => {
-      this.onMessage(msg);
+      this.onMessage(msg).catch((err) => {
+        console.error("[PairProg Client] Error handling message:", err);
+      });
     });
 
     this.client.on("error", (err: Error) => {

@@ -28,6 +28,7 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DEBOUNCE_MS = 150;
+  private followActionGuardTimer: ReturnType<typeof setTimeout> | null = null;
 
   private highlightColor: string;
 
@@ -101,8 +102,6 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     // Re-apply decorations when the active editor changes
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => {
-        this.followActionGuard = true;
-        setTimeout(() => { this.followActionGuard = false; }, 100);
         this.applyRemoteDecorations();
       })
     );
@@ -305,8 +304,12 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     } finally {
       // Release guard on next tick so the selection change event from
       // showTextDocument / revealRange is suppressed
-      setTimeout(() => {
+      if (this.followActionGuardTimer) {
+        clearTimeout(this.followActionGuardTimer);
+      }
+      this.followActionGuardTimer = setTimeout(() => {
         this.followActionGuard = false;
+        this.followActionGuardTimer = null;
       }, 0);
     }
   }
@@ -438,6 +441,10 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   dispose(): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
+    }
+    if (this.followActionGuardTimer) {
+      clearTimeout(this.followActionGuardTimer);
+      this.followActionGuardTimer = null;
     }
     this.clearDecorations();
     this.cursorDecorationType.dispose();

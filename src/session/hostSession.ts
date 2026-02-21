@@ -103,7 +103,9 @@ export class HostSession implements vscode.Disposable {
     });
 
     this.server.on("clientConnected", (hello: HelloPayload) => {
-      this.onClientConnected(hello);
+      this.onClientConnected(hello).catch((err) => {
+        console.error("[PairProg Host] Error handling client connection:", err);
+      });
     });
 
     this.server.on("clientDisconnected", () => {
@@ -111,7 +113,9 @@ export class HostSession implements vscode.Disposable {
     });
 
     this.server.on("message", (msg: Message) => {
-      this.onMessage(msg);
+      this.onMessage(msg).catch((err) => {
+        console.error("[PairProg Host] Error handling message:", err);
+      });
     });
 
     this.server.on("error", (err: Error) => {

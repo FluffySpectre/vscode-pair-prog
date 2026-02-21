@@ -273,11 +273,15 @@ export class FileOpsSync implements vscode.Disposable {
 
     // Open new tabs (tree is already updated so readFile works).
     for (const { newUri, viewColumn, wasActive } of snapshots) {
-      await vscode.window.showTextDocument(newUri, {
-        preview: false,
-        preserveFocus: !wasActive,
-        viewColumn,
-      });
+      try {
+        await vscode.window.showTextDocument(newUri, {
+          preview: false,
+          preserveFocus: !wasActive,
+          viewColumn,
+        });
+      } catch (err) {
+        console.warn(`[PairProg] Failed to reopen tab at ${newUri}:`, err);
+      }
     }
 
     const oldUriStrings = new Set(snapshots.map(s => s.oldUriStr));
@@ -292,7 +296,11 @@ export class FileOpsSync implements vscode.Disposable {
     }
 
     if (freshTabs.length > 0) {
-      await vscode.window.tabGroups.close(freshTabs);
+      try {
+        await vscode.window.tabGroups.close(freshTabs);
+      } catch (err) {
+        console.warn("[PairProg] Failed to close stale tabs:", err);
+      }
     }
   }
 

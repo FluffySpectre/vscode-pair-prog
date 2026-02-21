@@ -16,6 +16,7 @@ export class StatusBar implements vscode.Disposable {
   private state: ConnectionState = ConnectionState.Idle;
   private address: string = "";
   private partnerName: string = "";
+  private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(
@@ -81,6 +82,9 @@ export class StatusBar implements vscode.Disposable {
   }
 
   setDisconnected(): void {
+    if (this.autoHideTimer) {
+      clearTimeout(this.autoHideTimer);
+    }
     this.state = ConnectionState.Disconnected;
     this.item.text = `$(debug-disconnect) Disconnected`;
     this.item.tooltip = "Pair Programming session ended.";
@@ -90,7 +94,8 @@ export class StatusBar implements vscode.Disposable {
     this.item.show();
 
     // Auto-hide after 5 seconds
-    setTimeout(() => {
+    this.autoHideTimer = setTimeout(() => {
+      this.autoHideTimer = null;
       if (this.state === ConnectionState.Disconnected) {
         this.hide();
       }
@@ -113,6 +118,10 @@ export class StatusBar implements vscode.Disposable {
   // Dispose
 
   dispose(): void {
+    if (this.autoHideTimer) {
+      clearTimeout(this.autoHideTimer);
+      this.autoHideTimer = null;
+    }
     this.item.dispose();
   }
 }

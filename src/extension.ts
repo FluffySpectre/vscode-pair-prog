@@ -124,6 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       let address: string | undefined;
+      let requiresPassphrase = false;
 
       await vscode.window.withProgress(
         {
@@ -181,6 +182,8 @@ export function activate(context: vscode.ExtensionContext) {
 
           if (picked.sessionAddress) {
             address = picked.sessionAddress;
+            requiresPassphrase = picked.requiresPassphrase || false;
+
           } else {
             address = await vscode.window.showInputBox({
               prompt: "Enter the host's address",
@@ -200,12 +203,16 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (!address) { return; }
 
-      const passphrase = await vscode.window.showInputBox({
-        prompt: "Enter session passphrase (leave blank if none)",
-        password: true,
-        placeHolder: "Passphrase",
-      });
-      if (passphrase === undefined) { return; }
+      // Ask for passphrase if required
+      let passphrase: string | undefined;
+      if (requiresPassphrase) {
+        passphrase = await vscode.window.showInputBox({
+          prompt: "Enter session passphrase (leave blank if none)",
+          password: true,
+          placeHolder: "Passphrase",
+        });
+        if (passphrase === undefined) { return; }
+      }
 
       try {
         clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);

@@ -255,6 +255,20 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Jump to Partner
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.jumpToPartner", async () => {
+      if (hostSession?.isActive) {
+        await hostSession.jumpToPartner();
+      } else if (clientSession?.isActive) {
+        await clientSession.jumpToPartner();
+      } else {
+        vscode.window.showWarningMessage("No active pair programming session.");
+      }
+    })
+  );
+
   for (const cmd of featureRegistry.getCommands()) {
     context.subscriptions.push(
       vscode.commands.registerCommand(cmd.commandId, async () => {
@@ -284,6 +298,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (hostSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
+          { label: "$(location) Jump to Partner", description: "" },
         );
 
         // Add feature items for host role
@@ -299,6 +314,7 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (clientSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
+          { label: "$(location) Jump to Partner", description: "" },
         );
 
         // Add feature items for client role
@@ -327,6 +343,8 @@ export function activate(context: vscode.ExtensionContext) {
       // Check core commands first
       if (picked.label.includes("Toggle Follow Mode")) {
         vscode.commands.executeCommand("pairprog.toggleFollowMode");
+      } else if (picked.label.includes("Jump to Partner")) {
+        vscode.commands.executeCommand("pairprog.jumpToPartner");
       } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");

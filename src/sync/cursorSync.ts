@@ -231,6 +231,14 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     return this.following;
   }
 
+  async jumpToPartner(): Promise<void> {
+    if (!this.remoteCursors) {
+      vscode.window.showInformationMessage("No partner cursor position available yet.");
+      return;
+    }
+    await this.followRemoteCursor(this.remoteCursors);
+  }
+
   isFollowing(): boolean {
     return this.following;
   }

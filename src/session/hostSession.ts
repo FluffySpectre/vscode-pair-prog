@@ -363,6 +363,10 @@ export class HostSession implements vscode.Disposable {
     this.cursorSync?.toggleFollow();
   }
 
+  async jumpToPartner(): Promise<void> {
+    await this.cursorSync?.jumpToPartner();
+  }
+
   get isActive(): boolean {
     return this.server.isRunning;
   }

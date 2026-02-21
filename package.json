@@ -36,6 +36,10 @@
         "title": "PairProg: Toggle Follow Mode"
       },
       {
+        "command": "pairprog.jumpToPartner",
+        "title": "PairProg: Jump to Partner"
+      },
+      {
         "command": "pairprog.openWhiteboard",
         "title": "PairProg: Open Whiteboard"
       },
@@ -61,6 +65,11 @@
         "command": "pairprog.sendMessage",
         "key": "ctrl+shift+m",
         "mac": "cmd+shift+m"
+      },
+      {
+        "command": "pairprog.jumpToPartner",
+        "key": "ctrl+shift+j",
+        "mac": "cmd+shift+j"
       }
     ],
     "configuration": {

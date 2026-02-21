@@ -54,6 +54,15 @@
 
   <button id="deleteBtn" title="Delete selected (Del)"><svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg></button>
   <button id="clearBtn">Clear</button>
+
+  <span class="separator"></span>
+
+  <button id="saveBtn" title="Save as PNG (Ctrl+S)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 2v8M5 7l3 3 3-3"/>
+      <path d="M2 12v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1"/>
+    </svg>
+  </button>
 </div>
 <input type="text" id="textInput" />
 <canvas id="board"></canvas>
@@ -645,9 +654,40 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   redrawAll();
 });
 
+document.getElementById("saveBtn").addEventListener("click", savePng);
+
+function savePng() {
+  // Temporarily deselect so the selection box is not included in the export
+  const savedSelectedId = selectedId;
+  selectedId = null;
+  redrawAll();
+
+  // Create an offscreen canvas with a filled background
+  const offCanvas = document.createElement("canvas");
+  offCanvas.width = canvas.width;
+  offCanvas.height = canvas.height;
+  const offCtx = offCanvas.getContext("2d");
+  offCtx.fillStyle = getComputedStyle(document.body).backgroundColor || "#1e1e1e";
+  offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+  offCtx.drawImage(canvas, 0, 0);
+
+  const dataUrl = offCanvas.toDataURL("image/png");
+
+  // Restore selection
+  selectedId = savedSelectedId;
+  redrawAll();
+
+  vscode.postMessage({ type: "savePng", payload: { dataUrl } });
+}
+
 // --- Keyboard shortcuts ---
 document.addEventListener("keydown", e => {
   if (e.target !== document.body && e.target !== canvas) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    savePng();
+    return;
+  }
   switch (e.key.toLowerCase()) {
     case "v": setTool("select"); break;
     case "p": setTool("pen"); break;

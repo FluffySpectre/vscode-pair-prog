@@ -70,6 +70,30 @@ export class WhiteboardPanel {
           });
           break;
         }
+        case "savePng": {
+          (async () => {
+            const dataUrl = msg.payload.dataUrl as string;
+            const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+            const buffer = Buffer.from(base64, "base64");
+            const now = new Date();
+            const timestamp = now.getFullYear().toString()
+              + (now.getMonth() + 1).toString().padStart(2, "0")
+              + now.getDate().toString().padStart(2, "0")
+              + "-"
+              + now.getHours().toString().padStart(2, "0")
+              + now.getMinutes().toString().padStart(2, "0")
+              + now.getSeconds().toString().padStart(2, "0");
+            const uri = await vscode.window.showSaveDialog({
+              filters: { "PNG Image": ["png"] },
+              defaultUri: vscode.Uri.file(`whiteboard-${timestamp}.png`),
+            });
+            if (uri) {
+              await vscode.workspace.fs.writeFile(uri, buffer);
+              vscode.window.showInformationMessage(`Whiteboard saved to ${uri.fsPath}`);
+            }
+          })();
+          break;
+        }
       }
     });
 

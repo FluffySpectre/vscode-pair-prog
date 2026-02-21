@@ -16,19 +16,23 @@
   #toolbar::-webkit-scrollbar { height: 4px; }
   #toolbar::-webkit-scrollbar-track { background: transparent; }
   #toolbar::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, rgba(100,100,100,0.4)); border-radius: 2px; }
-  #toolbar button, #toolbar .tool-btn {
+  #toolbar button {
     padding: 4px 8px; cursor: pointer; flex-shrink: 0;
     background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
     border: none; border-radius: 3px; display: flex; align-items: center; justify-content: center;
     min-width: 28px; height: 28px;
   }
-  #toolbar button:hover, #toolbar .tool-btn:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
+  #toolbar button:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
   #toolbar button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
   #board.panning { cursor: grab; }
   #board.panning-active { cursor: grabbing; }
   #zoomLevelBtn { font-size: 11px; min-width: 40px; font-family: monospace; }
-  #toolbar .tool-btn.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); outline: 1px solid var(--vscode-focusBorder); }
-  #toolbar .tool-btn svg { width: 16px; height: 16px; }
+  #toolSelect {
+    flex-shrink: 0; cursor: pointer; height: 28px; padding: 0 6px;
+    background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
+    border: none; border-radius: 3px; font: inherit;
+  }
+  #toolSelect:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
   .separator { flex-shrink: 0; width: 1px; height: 20px; background: var(--vscode-panel-border); margin: 0 2px; }
   #colorPicker { flex-shrink: 0; width: 28px; height: 28px; cursor: pointer; border: none; padding: 0; border-radius: 3px; }
   #widthSlider { flex-shrink: 0; width: 50px; height: 20px; cursor: pointer; }
@@ -42,27 +46,15 @@
 </head>
 <body>
 <div id="toolbar">
-  <button class="tool-btn active" data-tool="select" title="Select (V)">
-    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 1l10 7-4.5 1L6 14z"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="pen" title="Pen (P)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 14c2-4 4-6 6-8s4-3 6-4"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="rect" title="Rectangle (R)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="ellipse" title="Circle / Ellipse (C)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="8" rx="6" ry="5"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="line" title="Line (L)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="14" x2="14" y2="2"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="14" x2="13" y2="3"/><polyline points="7,3 13,3 13,9"/></svg>
-  </button>
-  <button class="tool-btn" data-tool="text" title="Text (T)">
-    <svg viewBox="0 0 16 16" fill="currentColor"><text x="3" y="13" font-size="13" font-weight="bold" font-family="sans-serif">T</text></svg>
-  </button>
+  <select id="toolSelect" title="Tool (V/P/R/C/L/A/T)">
+    <option value="select">↖ Select</option>
+    <option value="pen">✏ Pen</option>
+    <option value="rect">▭ Rectangle</option>
+    <option value="ellipse">◯ Circle</option>
+    <option value="line">╱ Line</option>
+    <option value="arrow">→ Arrow</option>
+    <option value="text">T Text</option>
+  </select>
 
   <span class="separator"></span>
 
@@ -193,18 +185,16 @@ function resetView() {
 colorPicker.addEventListener("input", e => { currentColor = e.target.value; });
 widthSlider.addEventListener("input", e => { currentWidth = parseInt(e.target.value, 10); });
 
+const toolSelect = document.getElementById("toolSelect");
+
 function setTool(tool) {
   currentTool = tool;
   if (tool !== "select") { selectedIds.clear(); redrawAll(); }
-  document.querySelectorAll(".tool-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tool === tool);
-  });
+  toolSelect.value = tool;
   updateCursor();
 }
 
-document.querySelectorAll(".tool-btn").forEach(btn => {
-  btn.addEventListener("click", () => setTool(btn.dataset.tool));
-});
+toolSelect.addEventListener("change", e => setTool(e.target.value));
 
 // --- Entity bounding box ---
 function getEntityBounds(e) {

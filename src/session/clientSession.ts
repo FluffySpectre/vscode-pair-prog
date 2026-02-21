@@ -16,6 +16,7 @@ import {
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
+  PROTOCOL_VERSION,
 } from "../network/protocol";
 import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
@@ -76,6 +77,7 @@ export class ClientSession implements vscode.Disposable {
       username: this.username,
       workspaceFolder: "virtual",
       passphrase: passphrase || undefined,
+      protocolVersion: PROTOCOL_VERSION,
     };
 
     this.setupClientEvents();

@@ -13,6 +13,7 @@ import {
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
+  PROTOCOL_VERSION,
 } from "../network/protocol";
 import { buildDirectoryTree } from "../vfs/directoryTreeBuilder";
 import { DocumentSync } from "../sync/documentSync";
@@ -156,6 +157,14 @@ export class HostSession implements vscode.Disposable {
       return;
     }
 
+    if (hello.protocolVersion !== PROTOCOL_VERSION) {
+      this.server.rejectClient({
+        message: `Protocol version mismatch: client uses v${hello.protocolVersion ?? "unknown"}, host requires v${PROTOCOL_VERSION}. Please ensure both sides run the same extension version.`,
+        code: "VERSION_MISMATCH",
+      });
+      return;
+    }
+
     if (this.passphrase && hello.passphrase !== this.passphrase) {
       this.server.rejectClient({
         message: "Incorrect passphrase.",
@@ -172,7 +181,7 @@ export class HostSession implements vscode.Disposable {
     await this.setupSync();
 
     const openFiles = this.getOpenTextFiles();
-    const welcome: WelcomePayload = { hostUsername: this.username, openFiles };
+    const welcome: WelcomePayload = { hostUsername: this.username, openFiles, protocolVersion: PROTOCOL_VERSION };
     this.server.send(createMessage(MessageType.Welcome, welcome));
 
     // Send directory tree so the client can build its virtual workspace

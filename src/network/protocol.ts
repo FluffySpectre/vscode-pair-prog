@@ -1,3 +1,8 @@
+// Protocol version
+// Increment whenever the message format changes in a backwards-incompatible way. 
+// Both sides reject a connection if the versions do not match exactly.
+export const PROTOCOL_VERSION = 1;
+
 // Message Types
 
 export enum MessageType {
@@ -57,11 +62,13 @@ export interface HelloPayload {
   username: string;
   workspaceFolder: string; // root folder name for compatibility check
   passphrase?: string;
+  protocolVersion: number;
 }
 
 export interface WelcomePayload {
   hostUsername: string;
   openFiles: string[]; // workspace-relative paths of open documents
+  protocolVersion: number;
 }
 
 export interface CursorPosition {

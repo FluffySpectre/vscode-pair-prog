@@ -8,6 +8,7 @@ import {
   deserialize,
   createMessage,
   HelloPayload,
+  PROTOCOL_VERSION,
 } from "./protocol";
 
 export interface ClientEvents {
@@ -141,9 +142,19 @@ export class PairProgClient extends EventEmitter {
         const msg = deserialize(data.toString());
 
         switch (msg.type) {
-          case MessageType.Welcome:
-            this.emit("connected", msg.payload as WelcomePayload);
+          case MessageType.Welcome: {
+            const welcome = msg.payload as WelcomePayload;
+            if (welcome.protocolVersion !== PROTOCOL_VERSION) {
+              this.intentionalDisconnect = true;
+              this.emit("error", new Error(
+                `Protocol version mismatch: host uses v${welcome.protocolVersion ?? "unknown"}, this extension requires v${PROTOCOL_VERSION}. Please ensure both sides run the same extension version.`
+              ));
+              this.socket?.close();
+              return;
+            }
+            this.emit("connected", welcome);
             break;
+          }
 
           case MessageType.Ping:
             this.resetHeartbeatTimeout();
@@ -158,7 +169,7 @@ export class PairProgClient extends EventEmitter {
 
           case MessageType.Error: {
             const errorPayload = msg.payload as { message: string; code?: string };
-            if (errorPayload.code === "AUTH_FAILED") {
+            if (errorPayload.code === "AUTH_FAILED" || errorPayload.code === "VERSION_MISMATCH") {
               this.intentionalDisconnect = true;
             }
             this.emit("error", new Error(errorPayload.message));

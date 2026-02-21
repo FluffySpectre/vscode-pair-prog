@@ -41,6 +41,9 @@
   <button class="tool-btn" data-tool="line" title="Line (L)">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="14" x2="14" y2="2"/></svg>
   </button>
+  <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="14" x2="13" y2="3"/><polyline points="7,3 13,3 13,9"/></svg>
+  </button>
   <button class="tool-btn" data-tool="text" title="Text (T)">
     <svg viewBox="0 0 16 16" fill="currentColor"><text x="3" y="13" font-size="13" font-weight="bold" font-family="sans-serif">T</text></svg>
   </button>
@@ -116,7 +119,7 @@ document.querySelectorAll(".tool-btn").forEach(btn => {
 
 // --- Entity bounding box ---
 function getEntityBounds(e) {
-  if (e.type === "line") {
+  if (e.type === "line" || e.type === "arrow") {
     const x = Math.min(e.x1, e.x2), y = Math.min(e.y1, e.y2);
     return { x, y, w: Math.abs(e.x2 - e.x1) || 4, h: Math.abs(e.y2 - e.y1) || 4 };
   }
@@ -170,6 +173,34 @@ function drawLineEntity(e) {
   ctx.stroke();
 }
 
+function drawArrowEntity(e) {
+  ctx.strokeStyle = e.color;
+  ctx.lineWidth = e.strokeWidth;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // Shaft
+  ctx.beginPath();
+  ctx.moveTo(e.x1, e.y1);
+  ctx.lineTo(e.x2, e.y2);
+  ctx.stroke();
+  // Arrowhead
+  const angle = Math.atan2(e.y2 - e.y1, e.x2 - e.x1);
+  const headLen = Math.max(12, e.strokeWidth * 5);
+  const headAngle = Math.PI / 6;
+  ctx.beginPath();
+  ctx.moveTo(e.x2, e.y2);
+  ctx.lineTo(
+    e.x2 - headLen * Math.cos(angle - headAngle),
+    e.y2 - headLen * Math.sin(angle - headAngle)
+  );
+  ctx.moveTo(e.x2, e.y2);
+  ctx.lineTo(
+    e.x2 - headLen * Math.cos(angle + headAngle),
+    e.y2 - headLen * Math.sin(angle + headAngle)
+  );
+  ctx.stroke();
+}
+
 function drawTextEntity(e) {
   ctx.fillStyle = e.color;
   ctx.font = e.fontSize + "px sans-serif";
@@ -182,6 +213,7 @@ function drawEntity(e) {
     case "stroke": drawStrokeEntity(e); break;
     case "rect":   drawRectEntity(e); break;
     case "line":   drawLineEntity(e); break;
+    case "arrow":  drawArrowEntity(e); break;
     case "text":   drawTextEntity(e); break;
   }
 }
@@ -253,6 +285,7 @@ function isPointInEntity(px, py, e) {
     case "rect":
       return px >= e.x && px <= e.x + e.width && py >= e.y && py <= e.y + e.height;
     case "line":
+    case "arrow":
       return distToSegment(px, py, e.x1, e.y1, e.x2, e.y2) < HIT_TOLERANCE;
     case "text": {
       const b = getEntityBounds(e);
@@ -416,7 +449,7 @@ canvas.addEventListener("pointermove", e => {
       const ent = entities.get(selectedId);
       const newX = px - dragOffset.x;
       const newY = py - dragOffset.y;
-      if (ent.type === "line") {
+      if (ent.type === "line" || ent.type === "arrow") {
         const dx = newX - Math.min(ent.x1, ent.x2);
         const dy = newY - Math.min(ent.y1, ent.y2);
         ent.x1 += dx; ent.y1 += dy;
@@ -449,7 +482,7 @@ canvas.addEventListener("pointermove", e => {
           x: p.x * scaleX,
           y: p.y * scaleY,
         }));
-      } else if (ent.type === "line") {
+      } else if (ent.type === "line" || ent.type === "arrow") {
         const oldB = resizeStartBounds;
         const scaleX = oldB.w > 0 ? newW / oldB.w : 1;
         const scaleY = oldB.h > 0 ? newH / oldB.h : 1;
@@ -516,6 +549,18 @@ canvas.addEventListener("pointermove", e => {
     redrawAll();
     return;
   }
+
+  if (currentTool === "arrow") {
+    previewEntity = {
+      type: "arrow",
+      x1: dragStart.x, y1: dragStart.y, x2: px, y2: py,
+      x: Math.min(dragStart.x, px), y: Math.min(dragStart.y, py),
+      width: Math.abs(px - dragStart.x), height: Math.abs(py - dragStart.y),
+      color: currentColor, strokeWidth: currentWidth,
+    };
+    redrawAll();
+    return;
+  }
 });
 
 function finishDrag(e) {
@@ -527,7 +572,7 @@ function finishDrag(e) {
     if ((dragMode === "move" || (dragMode && dragMode.startsWith("resize-"))) && selectedId && entities.has(selectedId)) {
       const ent = entities.get(selectedId);
       const changes = {};
-      if (ent.type === "line") {
+      if (ent.type === "line" || ent.type === "arrow") {
         Object.assign(changes, { x: ent.x, y: ent.y, width: ent.width, height: ent.height, x1: ent.x1, y1: ent.y1, x2: ent.x2, y2: ent.y2 });
       } else if (ent.type === "stroke") {
         Object.assign(changes, { x: ent.x, y: ent.y, width: ent.width, height: ent.height, points: ent.points });
@@ -600,6 +645,26 @@ function finishDrag(e) {
     const entity = {
       id: crypto.randomUUID(),
       type: "line",
+      x: Math.min(dragStart.x, px), y: Math.min(dragStart.y, py),
+      width: Math.abs(dx), height: Math.abs(dy),
+      x1: dragStart.x, y1: dragStart.y, x2: px, y2: py,
+      color: currentColor,
+      createdBy: "",
+      strokeWidth: currentWidth,
+    };
+    entities.set(entity.id, entity);
+    vscode.postMessage({ type: "entityAdd", payload: { entity } });
+    redrawAll();
+    return;
+  }
+
+  if (currentTool === "arrow") {
+    previewEntity = null;
+    const dx = px - dragStart.x, dy = py - dragStart.y;
+    if (Math.hypot(dx, dy) < 3) { redrawAll(); return; }
+    const entity = {
+      id: crypto.randomUUID(),
+      type: "arrow",
       x: Math.min(dragStart.x, px), y: Math.min(dragStart.y, py),
       width: Math.abs(dx), height: Math.abs(dy),
       x1: dragStart.x, y1: dragStart.y, x2: px, y2: py,
@@ -693,6 +758,7 @@ document.addEventListener("keydown", e => {
     case "p": setTool("pen"); break;
     case "r": setTool("rect"); break;
     case "l": setTool("line"); break;
+    case "a": setTool("arrow"); break;
     case "t": setTool("text"); break;
   }
   if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {

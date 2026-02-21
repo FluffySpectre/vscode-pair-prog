@@ -156,9 +156,14 @@ export class PairProgClient extends EventEmitter {
             this.emit("disconnected");
             break;
 
-          case MessageType.Error:
-            this.emit("error", new Error((msg.payload as { message: string }).message));
+          case MessageType.Error: {
+            const errorPayload = msg.payload as { message: string; code?: string };
+            if (errorPayload.code === "AUTH_FAILED") {
+              this.intentionalDisconnect = true;
+            }
+            this.emit("error", new Error(errorPayload.message));
             break;
+          }
 
           default:
             this.emit("message", msg);

@@ -43,6 +43,7 @@ export class HostSession implements vscode.Disposable {
   private username: string;
   private address: string = "";
   private clientUsername: string = "";
+  private passphrase: string = "";
   private broadcaster: BeaconBroadcaster | null = null;
   private isStopping = false;
   private _context: vscode.ExtensionContext;
@@ -65,6 +66,16 @@ export class HostSession implements vscode.Disposable {
     const config = vscode.workspace.getConfiguration("pairprog");
     const port = config.get<number>("port") || 9876;
 
+    const passphrase = await vscode.window.showInputBox({
+      prompt: "Set a session passphrase (leave blank for no authentication)",
+      password: true,
+      placeHolder: "Optional passphrase",
+    });
+    if (passphrase === undefined) {
+      return; // User pressed Escape
+    }
+    this.passphrase = passphrase;
+
     this.address = await this.server.start(port);
     this.sharedbServer = new ShareDBServer(this.server);
     this.statusBar.setHosting(this.address);
@@ -74,6 +85,7 @@ export class HostSession implements vscode.Disposable {
       name: this.username,
       address: this.address,
       workspaceFolder: wsFolder?.name ?? "workspace",
+      requiresPassphrase: !!this.passphrase,
     });
     this.broadcaster.on("error", (err: Error) => {
       console.warn("[PairProg Host] Beacon error:", err.message);
@@ -141,6 +153,14 @@ export class HostSession implements vscode.Disposable {
           message: "Host has no workspace open.",
         })
       );
+      return;
+    }
+
+    if (this.passphrase && hello.passphrase !== this.passphrase) {
+      this.server.rejectClient({
+        message: "Incorrect passphrase.",
+        code: "AUTH_FAILED",
+      });
       return;
     }
 

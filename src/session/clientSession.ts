@@ -69,12 +69,13 @@ export class ClientSession implements vscode.Disposable {
 
   // Connect
 
-  async connect(address: string): Promise<void> {
+  async connect(address: string, passphrase?: string): Promise<void> {
     this.address = address;
 
     const hello: HelloPayload = {
       username: this.username,
       workspaceFolder: "virtual",
+      passphrase: passphrase || undefined,
     };
 
     this.setupClientEvents();

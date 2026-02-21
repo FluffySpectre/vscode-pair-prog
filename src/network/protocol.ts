@@ -164,6 +164,7 @@ export interface BeaconPayload {
   name: string;
   address: string;
   workspaceFolder: string;
+  requiresPassphrase?: boolean;
 }
 
 // Serialization

@@ -84,6 +84,7 @@ export interface DiscoveredSession {
   name: string;
   address: string;
   workspaceFolder: string;
+  requiresPassphrase?: boolean;
   lastSeen: number;
 }
 
@@ -135,6 +136,7 @@ export class BeaconListener extends EventEmitter {
         name: beacon.name,
         address: beacon.address,
         workspaceFolder: beacon.workspaceFolder,
+        requiresPassphrase: beacon.requiresPassphrase,
         lastSeen: Date.now(),
       };
 

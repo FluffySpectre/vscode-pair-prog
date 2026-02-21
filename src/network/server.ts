@@ -6,6 +6,7 @@ import {
   Message,
   MessageType,
   HelloPayload,
+  ErrorPayload,
   serialize,
   deserialize,
   createMessage,
@@ -116,6 +117,18 @@ export class PairProgServer extends EventEmitter {
   send(msg: Message): void {
     if (this.client && this.client.readyState === ws.OPEN) {
       this.client.send(serialize(msg));
+    }
+  }
+
+  // Reject and disconnect the current client
+
+  rejectClient(error: ErrorPayload): void {
+    if (this.client && this.client.readyState === ws.OPEN) {
+      this.client.send(
+        serialize(createMessage(MessageType.Error, error))
+      );
+      this.client.close();
+      this.client = null;
     }
   }
 

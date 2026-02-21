@@ -154,13 +154,14 @@ export function activate(context: vscode.ExtensionContext) {
 
           if (token.isCancellationRequested) { return; }
 
-          type SessionItem = vscode.QuickPickItem & { sessionAddress?: string };
+          type SessionItem = vscode.QuickPickItem & { sessionAddress?: string; requiresPassphrase?: boolean };
 
           const items: SessionItem[] = found.map((s) => ({
-            label: `$(broadcast) ${s.name}`,
+            label: s.requiresPassphrase ? `$(lock) ${s.name}` : `$(broadcast) ${s.name}`,
             description: s.workspaceFolder,
             detail: s.address,
             sessionAddress: s.address,
+            requiresPassphrase: s.requiresPassphrase,
           }));
 
           items.push({
@@ -199,9 +200,16 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (!address) { return; }
 
+      const passphrase = await vscode.window.showInputBox({
+        prompt: "Enter session passphrase (leave blank if none)",
+        password: true,
+        placeHolder: "Passphrase",
+      });
+      if (passphrase === undefined) { return; }
+
       try {
         clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
-        await clientSession.connect(address);
+        await clientSession.connect(address, passphrase || undefined);
       } catch (err: any) {
         vscode.window.showErrorMessage(
           `Failed to connect: ${err.message}`

@@ -15,7 +15,7 @@ type OtTextOp = OtTextComponent[];
 export class ShareDBBridge implements vscode.Disposable {
   private connection: Connection;
   private docs: Map<string, Doc<string>> = new Map();
-  private remoteEditGuard = 0;
+  private readonly pendingRemoteEdits = new Set<string>();
   private disposables: vscode.Disposable[] = [];
   private pendingOps: Map<string, OtTextOp> = new Map();
   private batchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -105,10 +105,6 @@ export class ShareDBBridge implements vscode.Disposable {
   // Local edits -> ShareDB ops
 
   private onLocalDocumentChange(e: vscode.TextDocumentChangeEvent): void {
-    if (this.remoteEditGuard > 0) {
-      return;
-    }
-
     if (!isSyncableDocument(e.document.uri)) {
       return;
     }
@@ -119,6 +115,10 @@ export class ShareDBBridge implements vscode.Disposable {
 
     const filePath = toRelativePath(e.document.uri);
     if (!filePath) {
+      return;
+    }
+
+    if (this.pendingRemoteEdits.has(filePath)) {
       return;
     }
 
@@ -232,11 +232,11 @@ export class ShareDBBridge implements vscode.Disposable {
       }
     }
 
-    this.remoteEditGuard++;
+    this.pendingRemoteEdits.add(filePath);
     try {
       await vscode.workspace.applyEdit(workspaceEdit);
     } finally {
-      this.remoteEditGuard--;
+      this.pendingRemoteEdits.delete(filePath);
     }
   }
 
@@ -267,11 +267,11 @@ export class ShareDBBridge implements vscode.Disposable {
     const edit = new vscode.WorkspaceEdit();
     edit.replace(uri, fullRange, sharedbContent);
 
-    this.remoteEditGuard++;
+    this.pendingRemoteEdits.add(filePath);
     try {
       await vscode.workspace.applyEdit(edit);
     } finally {
-      this.remoteEditGuard--;
+      this.pendingRemoteEdits.delete(filePath);
     }
   }
 

@@ -89,6 +89,7 @@ export interface FollowUpdatePayload {
 export interface FileCreatedPayload {
   filePath: string;
   content: string;
+  isDirectory: boolean;
 }
 
 export interface FileDeletedPayload {

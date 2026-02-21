@@ -66,18 +66,27 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
     }
   }
 
-  applyFileCreated(relativePath: string, content: string): void {
+  applyFileCreated(relativePath: string, content: string, isDirectory: boolean): void {
     const normalizedPath = "/" + relativePath;
 
     // Ensure parent directories exist
     this.ensureParentDirs(normalizedPath);
 
-    this.tree.set(normalizedPath, {
-      type: vscode.FileType.File,
-      size: content.length,
-      mtime: Date.now(),
-      content: new TextEncoder().encode(content),
-    });
+    if (isDirectory) {
+      this.tree.set(normalizedPath, {
+        type: vscode.FileType.Directory,
+        size: 0,
+        mtime: Date.now(),
+        content: new Uint8Array(0),
+      });
+    } else {
+      this.tree.set(normalizedPath, {
+        type: vscode.FileType.File,
+        size: content.length,
+        mtime: Date.now(),
+        content: new TextEncoder().encode(content),
+      });
+    }
 
     this._onDidChangeFile.fire([
       { type: vscode.FileChangeType.Created, uri: this.pathToUri(normalizedPath) },

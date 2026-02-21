@@ -21,7 +21,7 @@ export class FileOpsSync implements vscode.Disposable {
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
   private workspaceRoot: string;
-  private remoteOpGuard = 0;
+  private readonly pendingRemoteOps = new Set<string>();
   private ignoredPatterns: string[];
   private vfsProvider?: PairProgFileSystemProvider;
 
@@ -50,8 +50,9 @@ export class FileOpsSync implements vscode.Disposable {
     // Watch for file creation
     this.disposables.push(
       vscode.workspace.onDidCreateFiles((e) => {
-        if (this.remoteOpGuard > 0) { return; }
         for (const file of e.files) {
+          const relativePath = toRelativePathFromRoot(file, this.workspaceRoot);
+          if (!relativePath || this.pendingRemoteOps.has(relativePath)) { continue; }
           this.onFileCreated(file);
         }
       })
@@ -60,18 +61,22 @@ export class FileOpsSync implements vscode.Disposable {
     // Watch for file deletion
     this.disposables.push(
       vscode.workspace.onDidDeleteFiles((e) => {
-        if (this.remoteOpGuard > 0) { return; }
         for (const file of e.files) {
+          const relativePath = toRelativePathFromRoot(file, this.workspaceRoot);
+          if (!relativePath || this.pendingRemoteOps.has(relativePath)) { continue; }
           this.onFileDeleted(file);
         }
       })
     );
 
-    // Watch for file rename
+    // Watch for file rename — suppress if either side of the rename is in flight
     this.disposables.push(
       vscode.workspace.onDidRenameFiles((e) => {
-        if (this.remoteOpGuard > 0) { return; }
         for (const { oldUri, newUri } of e.files) {
+          const oldPath = toRelativePathFromRoot(oldUri, this.workspaceRoot);
+          const newPath = toRelativePathFromRoot(newUri, this.workspaceRoot);
+          if ((oldPath && this.pendingRemoteOps.has(oldPath)) ||
+              (newPath && this.pendingRemoteOps.has(newPath))) { continue; }
           this.onFileRenamed(oldUri, newUri);
         }
       })
@@ -85,14 +90,26 @@ export class FileOpsSync implements vscode.Disposable {
     if (!relativePath || this.isIgnored(relativePath)) { return; }
 
     let content = "";
+    let isDirectory = false;
+
     try {
-      const doc = await vscode.workspace.openTextDocument(uri);
-      content = doc.getText();
+      const stat = await vscode.workspace.fs.stat(uri);
+      isDirectory = stat.type === vscode.FileType.Directory;
     } catch {
-      // Not a text file or unreadable - send empty content
+      // URI was deleted before we could stat it - skip
+      return;
     }
 
-    const payload: FileCreatedPayload = { filePath: relativePath, content };
+    if (!isDirectory) {
+      try {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        content = doc.getText();
+      } catch {
+        // Binary file or unreadable - send empty content
+      }
+    }
+
+    const payload: FileCreatedPayload = { filePath: relativePath, content, isDirectory };
     this.sendFn(createMessage(MessageType.FileCreated, payload));
   }
 
@@ -118,24 +135,28 @@ export class FileOpsSync implements vscode.Disposable {
 
   async handleFileCreated(payload: FileCreatedPayload): Promise<void> {
     if (this.vfsProvider) {
-      this.vfsProvider.applyFileCreated(payload.filePath, payload.content);
+      this.vfsProvider.applyFileCreated(payload.filePath, payload.content, payload.isDirectory);
       return;
     }
 
     // Fallback: write to disk (legacy behavior)
     const uri = toAbsoluteUri(payload.filePath);
-    this.remoteOpGuard++;
+    this.pendingRemoteOps.add(payload.filePath);
     try {
-      const dir = vscode.Uri.joinPath(uri, "..");
-      try {
-        await vscode.workspace.fs.createDirectory(dir);
-      } catch {
-        // Directory might already exist
+      if (payload.isDirectory) {
+        await vscode.workspace.fs.createDirectory(uri);
+      } else {
+        const dir = vscode.Uri.joinPath(uri, "..");
+        try {
+          await vscode.workspace.fs.createDirectory(dir);
+        } catch {
+          // Parent directory might already exist
+        }
+        const content = Buffer.from(payload.content, "utf-8");
+        await vscode.workspace.fs.writeFile(uri, content);
       }
-      const content = Buffer.from(payload.content, "utf-8");
-      await vscode.workspace.fs.writeFile(uri, content);
     } finally {
-      this.remoteOpGuard--;
+      this.pendingRemoteOps.delete(payload.filePath);
     }
   }
 
@@ -147,13 +168,13 @@ export class FileOpsSync implements vscode.Disposable {
 
     // Fallback: delete from disk (legacy behavior)
     const uri = toAbsoluteUri(payload.filePath);
-    this.remoteOpGuard++;
+    this.pendingRemoteOps.add(payload.filePath);
     try {
       await vscode.workspace.fs.delete(uri, { recursive: false });
     } catch {
       // File might not exist locally - that's fine
     } finally {
-      this.remoteOpGuard--;
+      this.pendingRemoteOps.delete(payload.filePath);
     }
   }
 
@@ -172,13 +193,15 @@ export class FileOpsSync implements vscode.Disposable {
     // Fallback: rename on disk (legacy behavior)
     const oldUri = toAbsoluteUri(payload.oldPath);
     const newUri = toAbsoluteUri(payload.newPath);
-    this.remoteOpGuard++;
+    this.pendingRemoteOps.add(payload.oldPath);
+    this.pendingRemoteOps.add(payload.newPath);
     try {
       await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
     } catch {
       // Source might not exist locally - skip
     } finally {
-      this.remoteOpGuard--;
+      this.pendingRemoteOps.delete(payload.oldPath);
+      this.pendingRemoteOps.delete(payload.newPath);
     }
   }
 

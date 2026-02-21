@@ -15,6 +15,9 @@
   }
   #toolbar button:hover, #toolbar .tool-btn:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
   #toolbar button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+  #board.panning { cursor: grab; }
+  #board.panning-active { cursor: grabbing; }
+  #zoomLevelBtn { font-size: 11px; min-width: 40px; font-family: monospace; }
   #toolbar .tool-btn.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); outline: 1px solid var(--vscode-focusBorder); }
   #toolbar .tool-btn svg { width: 16px; height: 16px; }
   .separator { width: 1px; height: 20px; background: var(--vscode-panel-border); margin: 0 2px; }
@@ -76,6 +79,12 @@
       <path d="M2 12v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1"/>
     </svg>
   </button>
+
+  <span class="separator"></span>
+
+  <button id="zoomOutBtn" title="Zoom out (scroll wheel)">−</button>
+  <button id="zoomLevelBtn" title="Reset view to 100% (Space+drag or middle-mouse to pan)">100%</button>
+  <button id="zoomInBtn" title="Zoom in (scroll wheel)">+</button>
 </div>
 <input type="text" id="textInput" />
 <canvas id="board"></canvas>
@@ -85,6 +94,7 @@ const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
 const colorPicker = document.getElementById("colorPicker");
 const widthSlider = document.getElementById("widthSlider");
+const zoomLevelBtn = document.getElementById("zoomLevelBtn");
 
 // --- State ---
 const entities = new Map();
@@ -116,9 +126,54 @@ const undoStack = [];
 const redoStack = [];
 const MAX_HISTORY = 100;
 
+// View transform state (pan + zoom)
+let viewOffset = { x: 0, y: 0 };
+let viewScale = 1.0;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let panStartOffset = { x: 0, y: 0 };
+let spaceDown = false;
+
 const HANDLE_SIZE = 8;
 const HIT_TOLERANCE = 6;
 const MIN_SIZE = 10;
+
+// --- View helpers ---
+function screenToWorld(sx, sy) {
+  return { x: (sx - viewOffset.x) / viewScale, y: (sy - viewOffset.y) / viewScale };
+}
+function worldToScreen(wx, wy) {
+  return { x: wx * viewScale + viewOffset.x, y: wy * viewScale + viewOffset.y };
+}
+function updateZoomDisplay() {
+  zoomLevelBtn.textContent = Math.round(viewScale * 100) + "%";
+}
+function updateCursor() {
+  if (spaceDown || isPanning) {
+    canvas.classList.toggle("panning", !isPanning);
+    canvas.classList.toggle("panning-active", isPanning);
+    canvas.style.cursor = "";
+  } else {
+    canvas.classList.remove("panning", "panning-active");
+    canvas.style.cursor = currentTool === "select" ? "default" : currentTool === "text" ? "text" : "crosshair";
+  }
+}
+function applyZoom(factor, pivotX, pivotY) {
+  // pivot in screen coordinates — keep that world point fixed under the cursor
+  const wx = (pivotX - viewOffset.x) / viewScale;
+  const wy = (pivotY - viewOffset.y) / viewScale;
+  viewScale = Math.max(0.05, Math.min(20, viewScale * factor));
+  viewOffset.x = pivotX - wx * viewScale;
+  viewOffset.y = pivotY - wy * viewScale;
+  updateZoomDisplay();
+  redrawAll();
+}
+function resetView() {
+  viewOffset = { x: 0, y: 0 };
+  viewScale = 1.0;
+  updateZoomDisplay();
+  redrawAll();
+}
 
 // --- Tool switching ---
 colorPicker.addEventListener("input", e => { currentColor = e.target.value; });
@@ -130,7 +185,7 @@ function setTool(tool) {
   document.querySelectorAll(".tool-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tool === tool);
   });
-  canvas.style.cursor = tool === "select" ? "default" : tool === "text" ? "text" : "crosshair";
+  updateCursor();
 }
 
 document.querySelectorAll(".tool-btn").forEach(btn => {
@@ -239,22 +294,27 @@ function drawEntity(e) {
 }
 
 // showHandles = true only when exactly one entity is selected (resize corners)
+// All pixel sizes are divided by viewScale so they stay constant on-screen regardless of zoom.
 function drawSelectionBox(e, showHandles) {
   const b = getEntityBounds(e);
+  const pad = 4 / viewScale;
+  const hs  = HANDLE_SIZE / viewScale;
+  const lw  = 1 / viewScale;
+  const dash = 4 / viewScale;
   ctx.save();
-  ctx.setLineDash([4, 4]);
+  ctx.setLineDash([dash, dash]);
   ctx.strokeStyle = "#4fc3f7";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+  ctx.lineWidth = lw;
+  ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
   ctx.setLineDash([]);
   if (showHandles) {
-    const corners = getCorners({ x: b.x - 4, y: b.y - 4, w: b.w + 8, h: b.h + 8 });
+    const corners = getCorners({ x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad });
     for (const c of corners) {
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "#4fc3f7";
-      ctx.lineWidth = 1;
-      ctx.fillRect(c.x - HANDLE_SIZE / 2, c.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
-      ctx.strokeRect(c.x - HANDLE_SIZE / 2, c.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+      ctx.lineWidth = lw;
+      ctx.fillRect(c.x - hs / 2, c.y - hs / 2, hs, hs);
+      ctx.strokeRect(c.x - hs / 2, c.y - hs / 2, hs, hs);
     }
   }
   ctx.restore();
@@ -262,6 +322,10 @@ function drawSelectionBox(e, showHandles) {
 
 function redrawAll() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Apply pan/zoom transform — everything below is in world space
+  ctx.save();
+  ctx.setTransform(viewScale, 0, 0, viewScale, viewOffset.x, viewOffset.y);
+
   for (const e of entities.values()) {
     drawEntity(e);
   }
@@ -275,18 +339,21 @@ function redrawAll() {
       drawSelectionBox(entities.get(id), showHandles);
     }
   }
-  // Draw rubber-band selection rectangle
+  // Draw rubber-band selection rectangle (world coords, scale-compensated line)
   if (rubberBandRect) {
+    const lw = 1 / viewScale, dash = 4 / viewScale;
     ctx.save();
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([dash, dash]);
     ctx.strokeStyle = "#4fc3f7";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = lw;
     ctx.strokeRect(rubberBandRect.x, rubberBandRect.y, rubberBandRect.w, rubberBandRect.h);
     ctx.fillStyle = "rgba(79, 195, 247, 0.05)";
     ctx.fillRect(rubberBandRect.x, rubberBandRect.y, rubberBandRect.w, rubberBandRect.h);
     ctx.setLineDash([]);
     ctx.restore();
   }
+
+  ctx.restore(); // restore identity transform
 }
 
 // --- Canvas resize ---
@@ -309,6 +376,8 @@ function distToSegment(px, py, ax, ay, bx, by) {
 }
 
 function isPointInEntity(px, py, e) {
+  // px/py are in world space; HIT_TOLERANCE is in screen pixels, so convert
+  const tol = HIT_TOLERANCE / viewScale;
   switch (e.type) {
     case "stroke": {
       if (!e.points || e.points.length < 2) return false;
@@ -316,7 +385,7 @@ function isPointInEntity(px, py, e) {
         const d = distToSegment(px, py,
           e.x + e.points[i - 1].x, e.y + e.points[i - 1].y,
           e.x + e.points[i].x, e.y + e.points[i].y);
-        if (d < HIT_TOLERANCE) return true;
+        if (d < tol) return true;
       }
       return false;
     }
@@ -324,7 +393,7 @@ function isPointInEntity(px, py, e) {
       return px >= e.x && px <= e.x + e.width && py >= e.y && py <= e.y + e.height;
     case "line":
     case "arrow":
-      return distToSegment(px, py, e.x1, e.y1, e.x2, e.y2) < HIT_TOLERANCE;
+      return distToSegment(px, py, e.x1, e.y1, e.x2, e.y2) < tol;
     case "text": {
       const b = getEntityBounds(e);
       return px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h;
@@ -342,12 +411,15 @@ function hitTest(px, py) {
 }
 
 function hitTestHandle(px, py, e) {
+  // px/py in world space; handle size and padding are in screen pixels → convert
+  const pad = 4 / viewScale;
+  const hs  = HANDLE_SIZE / viewScale;
   const b = getEntityBounds(e);
-  const expanded = { x: b.x - 4, y: b.y - 4, w: b.w + 8, h: b.h + 8 };
+  const expanded = { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad };
   const corners = getCorners(expanded);
   const labels = ["resize-nw", "resize-ne", "resize-se", "resize-sw"];
   for (let i = 0; i < corners.length; i++) {
-    if (Math.abs(px - corners[i].x) < HANDLE_SIZE && Math.abs(py - corners[i].y) < HANDLE_SIZE) {
+    if (Math.abs(px - corners[i].x) < hs && Math.abs(py - corners[i].y) < hs) {
       return labels[i];
     }
   }
@@ -514,7 +586,19 @@ textInputEl.addEventListener("blur", () => { if (textInputReady) commitTextInput
 
 // --- Pointer events ---
 canvas.addEventListener("pointerdown", e => {
-  const px = e.offsetX, py = e.offsetY;
+  // Middle mouse button or Space+left = pan
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+    panStartOffset = { ...viewOffset };
+    canvas.setPointerCapture(e.pointerId);
+    updateCursor();
+    e.preventDefault();
+    return;
+  }
+
+  // Convert screen → world for all drawing/selection operations
+  const { x: px, y: py } = screenToWorld(e.offsetX, e.offsetY);
   if (currentTool !== "text") {
     canvas.setPointerCapture(e.pointerId);
   }
@@ -586,7 +670,8 @@ canvas.addEventListener("pointerdown", e => {
     currentPoints = [{ x: px, y: py }];
   } else if (currentTool === "text") {
     isDragging = false;
-    showTextInput(px, py, "", 16, currentColor, text => {
+    const sp = worldToScreen(px, py);
+    showTextInput(sp.x, sp.y, "", 16 * viewScale, currentColor, text => {
       if (!text) return;
       const m = measureText(text, 16);
       const entity = {
@@ -608,8 +693,15 @@ canvas.addEventListener("pointerdown", e => {
 });
 
 canvas.addEventListener("pointermove", e => {
+  if (isPanning) {
+    viewOffset.x = panStartOffset.x + (e.clientX - panStart.x);
+    viewOffset.y = panStartOffset.y + (e.clientY - panStart.y);
+    updateZoomDisplay();
+    redrawAll();
+    return;
+  }
   if (!isDragging) return;
-  const px = e.offsetX, py = e.offsetY;
+  const { x: px, y: py } = screenToWorld(e.offsetX, e.offsetY);
 
   if (currentTool === "select") {
     if (dragMode === "move") {
@@ -690,13 +782,17 @@ canvas.addEventListener("pointermove", e => {
     const prev = currentPoints[currentPoints.length - 1];
     const pt = { x: px, y: py };
     currentPoints.push(pt);
+    // Draw in screen space (canvas has identity transform outside redrawAll),
+    // scaling the line width so it appears as currentWidth world-units on screen.
+    const prevS = worldToScreen(prev.x, prev.y);
+    const ptS   = worldToScreen(pt.x, pt.y);
     ctx.strokeStyle = currentColor;
-    ctx.lineWidth = currentWidth;
+    ctx.lineWidth = currentWidth * viewScale;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(prev.x, prev.y);
-    ctx.lineTo(pt.x, pt.y);
+    ctx.moveTo(prevS.x, prevS.y);
+    ctx.lineTo(ptS.x, ptS.y);
     ctx.stroke();
     return;
   }
@@ -751,7 +847,7 @@ function buildChanges(ent) {
 function finishDrag(e) {
   if (!isDragging) return;
   isDragging = false;
-  const px = e.offsetX, py = e.offsetY;
+  const { x: px, y: py } = screenToWorld(e.offsetX, e.offsetY);
 
   if (currentTool === "select") {
     if (dragMode === "move") {
@@ -893,18 +989,27 @@ function finishDrag(e) {
   }
 }
 
-canvas.addEventListener("pointerup", finishDrag);
-canvas.addEventListener("pointercancel", finishDrag);
+function handlePointerUp(e) {
+  if (isPanning) {
+    isPanning = false;
+    updateCursor();
+    return;
+  }
+  finishDrag(e);
+}
+canvas.addEventListener("pointerup", handlePointerUp);
+canvas.addEventListener("pointercancel", handlePointerUp);
 
 // --- Double-click to edit text ---
 canvas.addEventListener("dblclick", e => {
-  const px = e.offsetX, py = e.offsetY;
+  const { x: px, y: py } = screenToWorld(e.offsetX, e.offsetY);
   const hitId = hitTest(px, py);
   if (hitId) {
     const ent = entities.get(hitId);
     if (ent && ent.type === "text") {
       const beforeText = ent.text, beforeW = ent.width, beforeH = ent.height;
-      showTextInput(ent.x, ent.y, ent.text, ent.fontSize, ent.color, newText => {
+      const sp = worldToScreen(ent.x, ent.y);
+      showTextInput(sp.x, sp.y, ent.text, ent.fontSize * viewScale, ent.color, newText => {
         if (!newText) return;
         ent.text = newText;
         const m = measureText(newText, ent.fontSize);
@@ -920,6 +1025,41 @@ canvas.addEventListener("dblclick", e => {
       });
     }
   }
+});
+
+// --- Zoom / pan (mouse wheel) ---
+// Ctrl+scroll (or trackpad pinch) → zoom centred on cursor
+// Plain scroll                    → pan (matches Figma / Excalidraw behaviour)
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    applyZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.offsetX, e.offsetY);
+  } else {
+    viewOffset.x -= e.deltaX;
+    viewOffset.y -= e.deltaY;
+    updateZoomDisplay();
+    redrawAll();
+  }
+}, { passive: false });
+
+// --- Zoom buttons ---
+document.getElementById("zoomInBtn").addEventListener("click", () => {
+  applyZoom(1.25, canvas.width / 2, canvas.height / 2);
+});
+document.getElementById("zoomOutBtn").addEventListener("click", () => {
+  applyZoom(1 / 1.25, canvas.width / 2, canvas.height / 2);
+});
+zoomLevelBtn.addEventListener("click", resetView);
+
+// --- Space key pan mode ---
+document.addEventListener("keydown", ev => {
+  if (ev.code === "Space" && (ev.target === document.body || ev.target === canvas)) {
+    if (!spaceDown) { spaceDown = true; updateCursor(); }
+    ev.preventDefault();
+  }
+}, true); // capture phase so it fires before other keydown handlers
+document.addEventListener("keyup", ev => {
+  if (ev.code === "Space") { spaceDown = false; updateCursor(); }
 });
 
 // --- Delete / Clear ---

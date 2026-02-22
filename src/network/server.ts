@@ -1,6 +1,8 @@
 import * as ws from "ws";
-import * as http from "http";
+import * as https from "https";
 import * as os from "os";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const selfsigned = require("selfsigned");
 import { EventEmitter } from "events";
 import {
   Message,
@@ -20,7 +22,7 @@ export interface ServerEvents {
 }
 
 export class PairProgServer extends EventEmitter {
-  private _httpServer: http.Server | null = null;
+  private _httpServer: https.Server | null = null;
   private wsServer: ws.Server | null = null;
   private client: ws.WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +38,7 @@ export class PairProgServer extends EventEmitter {
     return this.client !== null && this.client.readyState === ws.OPEN;
   }
 
-  get httpServer(): http.Server | null {
+  get httpServer(): https.Server | null {
     return this._httpServer;
   }
 
@@ -44,7 +46,12 @@ export class PairProgServer extends EventEmitter {
 
   async start(port: number): Promise<string> {
     return new Promise((resolve, reject) => {
-      this._httpServer = http.createServer();
+      const pems = selfsigned.generate(
+        [{ name: "commonName", value: "pairprog-lan" }],
+        { days: 1, keySize: 2048, algorithm: "sha256" }
+      );
+
+      this._httpServer = https.createServer({ key: pems.private, cert: pems.cert });
       this.wsServer = new ws.Server({
         noServer: true,
         perMessageDeflate: {

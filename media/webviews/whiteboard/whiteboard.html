@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src {{cspSource}}; style-src {{cspSource}};">
+  <link rel="stylesheet" href="{{styleUri}}">
+</head>
+
+<body>
+  <div id="toolbar">
+    <select id="toolSelect" title="Tool (V/P/R/C/L/A/T)">
+      <option value="select">↖ Select</option>
+      <option value="pen">✏ Pen</option>
+      <option value="rect">▭ Rectangle</option>
+      <option value="ellipse">◯ Ellipse</option>
+      <option value="line">╱ Line</option>
+      <option value="arrow">→ Arrow</option>
+      <option value="text">T Text</option>
+    </select>
+
+    <span class="separator"></span>
+
+    <input type="color" id="colorPicker" value="#ffffff" title="Color" />
+    <input type="range" id="widthSlider" min="1" max="10" value="2" title="Stroke width" />
+
+    <span class="separator"></span>
+
+    <button id="undoBtn" disabled title="Undo (Ctrl+Z)">
+      <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor">
+        <path
+          d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z" />
+      </svg>
+    </button>
+    <button id="redoBtn" disabled title="Redo (Ctrl+Y)">
+      <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor">
+        <path
+          d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z" />
+      </svg>
+    </button>
+
+    <span class="separator"></span>
+
+    <button id="deleteBtn" title="Delete selected (Del)"><svg xmlns="http://www.w3.org/2000/svg" height="20px"
+        viewBox="0 -960 960 960" width="20px" fill="currentColor">
+        <path
+          d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+      </svg></button>
+    <button id="clearBtn">Clear</button>
+
+    <span class="separator"></span>
+
+    <button id="saveBtn" title="Save as PNG (Ctrl+S)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+        stroke-linejoin="round">
+        <path d="M8 2v8M5 7l3 3 3-3" />
+        <path d="M2 12v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" />
+      </svg>
+    </button>
+
+    <span class="separator"></span>
+
+    <button id="zoomOutBtn" title="Zoom out (scroll wheel)">−</button>
+    <button id="zoomLevelBtn" title="Reset view to 100% (Space+drag or middle-mouse to pan)">100%</button>
+    <button id="zoomInBtn" title="Zoom in (scroll wheel)">+</button>
+  </div>
+  <input type="text" id="textInput" />
+  <canvas id="board"></canvas>
+  <script src="{{scriptUri}}"></script>
+</body>
+
+</html>

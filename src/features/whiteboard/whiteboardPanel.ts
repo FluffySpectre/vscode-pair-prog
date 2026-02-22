@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import * as crypto from "crypto";
 import {
   Message,
   MessageType,
@@ -27,17 +26,25 @@ export class WhiteboardPanel {
     this.sendFn = sendFn;
     this.entities = entities;
 
+    const mediaDir = vscode.Uri.joinPath(context.extensionUri, "media");
+
     this.panel = vscode.window.createWebviewPanel(
       "pairprogWhiteboard",
       "Pair Programming Whiteboard",
       vscode.ViewColumn.Beside,
-      { enableScripts: true }
+      { enableScripts: true, localResourceRoots: [mediaDir] }
     );
 
-    const htmlPath = path.join(context.extensionPath, "media", "webviews", "whiteboard.html");
-    const nonce = getNonce();
+    const whiteboardDir = vscode.Uri.joinPath(mediaDir, "webviews", "whiteboard");
+    const scriptUri = this.panel.webview.asWebviewUri(vscode.Uri.joinPath(whiteboardDir, "whiteboard.js"));
+    const styleUri  = this.panel.webview.asWebviewUri(vscode.Uri.joinPath(whiteboardDir, "whiteboard.css"));
+    const cspSource = this.panel.webview.cspSource;
+
+    const htmlPath = path.join(context.extensionPath, "media", "webviews", "whiteboard",  "whiteboard.html");
     this.panel.webview.html = fs.readFileSync(htmlPath, "utf-8")
-      .replace(/\{\{nonce\}\}/g, nonce);
+      .replace("{{scriptUri}}", scriptUri.toString())
+      .replace("{{styleUri}}", styleUri.toString())
+      .replace(/\{\{cspSource\}\}/g, cspSource);
 
     this.panel.webview.onDidReceiveMessage((msg) => {
       switch (msg.type) {
@@ -135,8 +142,4 @@ export class WhiteboardPanel {
   getEntities(): WhiteboardEntity[] {
     return Array.from(this.entities.values());
   }
-}
-
-function getNonce(): string {
-  return crypto.randomBytes(16).toString("base64");
 }

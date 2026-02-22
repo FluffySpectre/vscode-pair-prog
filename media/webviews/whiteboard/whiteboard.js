@@ -1,98 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'nonce-{{nonce}}'; style-src 'unsafe-inline';">
-<style>
-  html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; background: var(--vscode-editor-background); }
-  #board { position: fixed; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
-  #toolbar {
-    position: fixed; top: 8px; left: 8px; right: 8px; z-index: 10;
-    display: flex; gap: 4px; align-items: center;
-    overflow-x: auto; flex-wrap: nowrap;
-    scrollbar-width: thin;
-    scrollbar-color: var(--vscode-scrollbarSlider-background, rgba(100,100,100,0.4)) transparent;
-  }
-  #toolbar::-webkit-scrollbar { height: 4px; }
-  #toolbar::-webkit-scrollbar-track { background: transparent; }
-  #toolbar::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, rgba(100,100,100,0.4)); border-radius: 2px; }
-  #toolbar button {
-    padding: 4px 8px; cursor: pointer; flex-shrink: 0;
-    background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
-    border: none; border-radius: 3px; display: flex; align-items: center; justify-content: center;
-    min-width: 28px; height: 28px;
-  }
-  #toolbar button:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
-  #toolbar button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-  #board.panning { cursor: grab; }
-  #board.panning-active { cursor: grabbing; }
-  #zoomLevelBtn { font-size: 11px; min-width: 40px; font-family: monospace; }
-  #toolSelect {
-    flex-shrink: 0; cursor: pointer; height: 28px; padding: 0 6px;
-    background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
-    border: none; border-radius: 3px; font: inherit;
-  }
-  #toolSelect:hover { background: var(--vscode-button-hoverBackground); color: var(--vscode-button-foreground); }
-  .separator { flex-shrink: 0; width: 1px; height: 20px; background: var(--vscode-panel-border); margin: 0 2px; }
-  #colorPicker { flex-shrink: 0; width: 28px; height: 28px; cursor: pointer; border: none; padding: 0; border-radius: 3px; }
-  #widthSlider { flex-shrink: 0; width: 50px; height: 20px; cursor: pointer; }
-  #textInput {
-    position: fixed; z-index: 20; display: none;
-    background: var(--vscode-input-background); color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-focusBorder); border-radius: 3px;
-    padding: 2px 4px; font: 16px sans-serif; outline: none; min-width: 80px;
-  }
-</style>
-</head>
-<body>
-<div id="toolbar">
-  <select id="toolSelect" title="Tool (V/P/R/C/L/A/T)">
-    <option value="select">↖ Select</option>
-    <option value="pen">✏ Pen</option>
-    <option value="rect">▭ Rectangle</option>
-    <option value="ellipse">◯ Ellipse</option>
-    <option value="line">╱ Line</option>
-    <option value="arrow">→ Arrow</option>
-    <option value="text">T Text</option>
-  </select>
-
-  <span class="separator"></span>
-
-  <input type="color" id="colorPicker" value="#ffffff" title="Color" />
-  <input type="range" id="widthSlider" min="1" max="10" value="2" title="Stroke width" />
-
-  <span class="separator"></span>
-
-  <button id="undoBtn" disabled title="Undo (Ctrl+Z)">
-    <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"/></svg>
-  </button>
-  <button id="redoBtn" disabled title="Redo (Ctrl+Y)">
-    <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"/></svg>
-  </button>
-
-  <span class="separator"></span>
-
-  <button id="deleteBtn" title="Delete selected (Del)"><svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg></button>
-  <button id="clearBtn">Clear</button>
-
-  <span class="separator"></span>
-
-  <button id="saveBtn" title="Save as PNG (Ctrl+S)">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8 2v8M5 7l3 3 3-3"/>
-      <path d="M2 12v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1"/>
-    </svg>
-  </button>
-
-  <span class="separator"></span>
-
-  <button id="zoomOutBtn" title="Zoom out (scroll wheel)">−</button>
-  <button id="zoomLevelBtn" title="Reset view to 100% (Space+drag or middle-mouse to pan)">100%</button>
-  <button id="zoomInBtn" title="Zoom in (scroll wheel)">+</button>
-</div>
-<input type="text" id="textInput" />
-<canvas id="board"></canvas>
-<script nonce="{{nonce}}">
 const vscode = acquireVsCodeApi();
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
@@ -310,12 +215,12 @@ function drawTextEntity(e) {
 
 function drawEntity(e) {
   switch (e.type) {
-    case "stroke":   drawStrokeEntity(e); break;
-    case "rect":     drawRectEntity(e); break;
-    case "ellipse":  drawEllipseEntity(e); break;
-    case "line":     drawLineEntity(e); break;
-    case "arrow":    drawArrowEntity(e); break;
-    case "text":     drawTextEntity(e); break;
+    case "stroke": drawStrokeEntity(e); break;
+    case "rect": drawRectEntity(e); break;
+    case "ellipse": drawEllipseEntity(e); break;
+    case "line": drawLineEntity(e); break;
+    case "arrow": drawArrowEntity(e); break;
+    case "text": drawTextEntity(e); break;
   }
 }
 
@@ -324,8 +229,8 @@ function drawEntity(e) {
 function drawSelectionBox(e, showHandles) {
   const b = getEntityBounds(e);
   const pad = 4 / viewScale;
-  const hs  = HANDLE_SIZE / viewScale;
-  const lw  = 1 / viewScale;
+  const hs = HANDLE_SIZE / viewScale;
+  const lw = 1 / viewScale;
   const dash = 4 / viewScale;
   ctx.save();
   ctx.setLineDash([dash, dash]);
@@ -390,7 +295,7 @@ function resize() {
   // Size the canvas backing store at physical pixels so it stays crisp on
   // HiDPI / Retina screens.  CSS keeps the element at 100% of the viewport.
   dpr = window.devicePixelRatio || 1;
-  canvas.width  = Math.round(window.innerWidth  * dpr);
+  canvas.width = Math.round(window.innerWidth * dpr);
   canvas.height = Math.round(window.innerHeight * dpr);
   redrawAll();
 }
@@ -453,7 +358,7 @@ function hitTest(px, py) {
 function hitTestHandle(px, py, e) {
   // px/py in world space; handle size and padding are in screen pixels → convert
   const pad = 4 / viewScale;
-  const hs  = HANDLE_SIZE / viewScale;
+  const hs = HANDLE_SIZE / viewScale;
   const b = getEntityBounds(e);
   const expanded = { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad };
   const corners = getCorners(expanded);
@@ -825,14 +730,14 @@ canvas.addEventListener("pointermove", e => {
     // Draw directly in device-pixel space (ctx is at identity outside redrawAll).
     // worldToScreen gives CSS pixels; multiply by dpr to get device pixels.
     const prevS = worldToScreen(prev.x, prev.y);
-    const ptS   = worldToScreen(pt.x, pt.y);
+    const ptS = worldToScreen(pt.x, pt.y);
     ctx.strokeStyle = currentColor;
     ctx.lineWidth = currentWidth * viewScale * dpr;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
     ctx.moveTo(prevS.x * dpr, prevS.y * dpr);
-    ctx.lineTo(ptS.x  * dpr, ptS.y  * dpr);
+    ctx.lineTo(ptS.x * dpr, ptS.y * dpr);
     ctx.stroke();
     return;
   }
@@ -1088,9 +993,13 @@ canvas.addEventListener("dblclick", e => {
         ent.width = m.w;
         ent.height = m.h;
         if (newText !== beforeText) {
-          pushUndo({ type: "update", changes: [{ id: hitId,
-            before: { text: beforeText, width: beforeW, height: beforeH },
-            after:  { text: newText,   width: m.w,    height: m.h } }] });
+          pushUndo({
+            type: "update", changes: [{
+              id: hitId,
+              before: { text: beforeText, width: beforeW, height: beforeH },
+              after: { text: newText, width: m.w, height: m.h }
+            }]
+          });
         }
         vscode.postMessage({ type: "entityUpdate", payload: { id: hitId, changes: { text: newText, width: m.w, height: m.h } } });
         redrawAll();
@@ -1224,7 +1133,7 @@ document.addEventListener("keydown", e => {
       if (pasted.type === "line" || pasted.type === "arrow") {
         pasted.x1 += pasteOffset; pasted.y1 += pasteOffset;
         pasted.x2 += pasteOffset; pasted.y2 += pasteOffset;
-        pasted.x  += pasteOffset; pasted.y  += pasteOffset;
+        pasted.x += pasteOffset; pasted.y += pasteOffset;
       } else {
         pasted.x += pasteOffset;
         pasted.y += pasteOffset;
@@ -1300,6 +1209,3 @@ window.addEventListener("message", event => {
 
 // Request full sync on load (handles webview re-creation)
 vscode.postMessage({ type: "requestFullSync" });
-</script>
-</body>
-</html>

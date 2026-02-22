@@ -6,12 +6,6 @@ import {
   MessageType,
   HelloPayload,
   WelcomePayload,
-  CursorUpdatePayload,
-  FollowUpdatePayload,
-  FileCreatedPayload,
-  FileDeletedPayload,
-  FileRenamedPayload,
-  FileSavedPayload,
   DirectoryTreePayload,
   FileContentRequestPayload,
   FileContentResponsePayload,
@@ -26,6 +20,7 @@ import { StatusBar } from "../ui/statusBar";
 import { getSystemUsername, toAbsoluteUri } from "../utils/pathUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 import { FeatureRegistry } from "../features";
+import { MessageRouter } from "../network/messageRouter";
 import { type as otText } from "ot-text";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -49,6 +44,7 @@ export class ClientSession implements vscode.Disposable {
   private fileOpsSync: FileOpsSync | null = null;
   private statusBar: StatusBar;
   private featureRegistry: FeatureRegistry;
+  private messageRouter: MessageRouter;
 
   private username: string;
   private address: string = "";
@@ -58,11 +54,12 @@ export class ClientSession implements vscode.Disposable {
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider, featureRegistry: FeatureRegistry) {
+  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
     this.statusBar = statusBar;
     this._context = context;
     this.vfsProvider = vfsProvider;
     this.featureRegistry = featureRegistry;
+    this.messageRouter = messageRouter;
     this.client = new PairProgClient();
 
     const config = vscode.workspace.getConfiguration("pairprog");
@@ -210,48 +207,14 @@ export class ClientSession implements vscode.Disposable {
     switch (msg.type) {
       case MessageType.DirectoryTree:
         await this.onDirectoryTree(msg.payload as DirectoryTreePayload);
-        break;
+        return;
 
       case MessageType.FileContentResponse:
         this.vfsProvider.handleContentResponse(msg.payload as FileContentResponsePayload);
-        break;
-
-      case MessageType.CursorUpdate:
-        this.cursorSync?.handleRemoteCursorUpdate(msg.payload as CursorUpdatePayload);
-        break;
-
-      case MessageType.FollowUpdate:
-        this.cursorSync?.handleRemoteFollowUpdate(msg.payload as FollowUpdatePayload);
-        break;
-
-      case MessageType.FileCreated:
-        if (this.fileOpsSync) {
-          await this.fileOpsSync.handleFileCreated(msg.payload as FileCreatedPayload);
-        }
-        break;
-
-      case MessageType.FileDeleted:
-        if (this.fileOpsSync) {
-          await this.fileOpsSync.handleFileDeleted(msg.payload as FileDeletedPayload);
-        }
-        break;
-
-      case MessageType.FileRenamed:
-        if (this.fileOpsSync) {
-          await this.fileOpsSync.handleFileRenamed(msg.payload as FileRenamedPayload);
-        }
-        break;
-
-      case MessageType.FileSaved:
-        if (this.documentSync) {
-          await this.documentSync.handleFileSaved(msg.payload as FileSavedPayload);
-        }
-        break;
-
-      default:
-        this.featureRegistry.routeMessage(msg);
-        break;
+        return;
     }
+
+    this.messageRouter.route(msg);
   }
 
   // Sync Setup / Teardown
@@ -287,6 +250,10 @@ export class ClientSession implements vscode.Disposable {
     this.fileOpsSync = new FileOpsSync(sendFn, false, "", ignored, this.vfsProvider);
     this.fileOpsSync.activate();
 
+    this.messageRouter.register(this.cursorSync);
+    this.messageRouter.register(this.documentSync);
+    this.messageRouter.register(this.fileOpsSync);
+
     await this.featureRegistry.activateAll({
       sendFn,
       role: "client",
@@ -297,6 +264,10 @@ export class ClientSession implements vscode.Disposable {
   }
 
   private teardownSync(): void {
+    if (this.cursorSync) { this.messageRouter.unregister(this.cursorSync); }
+    if (this.documentSync) { this.messageRouter.unregister(this.documentSync); }
+    if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
+
     this.documentSync?.dispose();
     this.documentSync = null;
 

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { Message } from "../network/protocol";
+import { Message, MessageHandler } from "../network/protocol";
 
 export type SessionRole = "host" | "client";
 
@@ -20,12 +20,10 @@ export interface FeatureCommand {
   execute: () => void | Promise<void>;
 }
 
-export interface Feature extends vscode.Disposable {
+export interface Feature extends vscode.Disposable, MessageHandler {
   readonly id: string;
-  readonly messageTypes: string[];
 
   activate(context: FeatureContext): void | Promise<void>;
-  handleMessage(msg: Message): void | Promise<void>;
   getCommands(): FeatureCommand[];
   deactivate(): void;
   dispose(): void;

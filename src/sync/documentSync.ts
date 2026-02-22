@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {
   Message,
   MessageType,
+  MessageHandler,
   FileSaveRequestPayload,
   FileSavedPayload,
   createMessage,
@@ -15,7 +16,7 @@ import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
  * - Client: intercepts saves and delegates to host via existing WebSocket protocol
  * - Host: handles FileSaveRequest (saves to disk, responds with FileSaved)
  */
-export class DocumentSync implements vscode.Disposable {
+export class DocumentSync implements vscode.Disposable, MessageHandler {
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
@@ -25,6 +26,23 @@ export class DocumentSync implements vscode.Disposable {
     this.sendFn = sendFn;
     this.isHost = isHost;
     this.vfsProvider = vfsProvider;
+  }
+
+  // MessageHandler
+
+  get messageTypes(): string[] {
+    return this.isHost ? [MessageType.FileSaveRequest] : [MessageType.FileSaved];
+  }
+
+  async handleMessage(msg: Message): Promise<void> {
+    switch (msg.type) {
+      case MessageType.FileSaveRequest:
+        await this.handleFileSaveRequest(msg.payload as FileSaveRequestPayload);
+        break;
+      case MessageType.FileSaved:
+        await this.handleFileSaved(msg.payload as FileSavedPayload);
+        break;
+    }
   }
 
   activate(): void {

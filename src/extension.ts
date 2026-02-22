@@ -12,6 +12,7 @@ import {
   TerminalFeature,
   SessionRole,
 } from "./features";
+import { MessageRouter } from "./network/messageRouter";
 
 const VFS_SCHEME = "pairprog";
 
@@ -20,6 +21,7 @@ let clientSession: ClientSession | null = null;
 let statusBar: StatusBar;
 let vfsProvider: PairProgFileSystemProvider;
 let extensionContext: vscode.ExtensionContext;
+let messageRouter: MessageRouter;
 let featureRegistry: FeatureRegistry;
 
 // Activate
@@ -37,8 +39,9 @@ export function activate(context: vscode.ExtensionContext) {
   statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
 
-  // Create feature registry and register all optional features
-  featureRegistry = new FeatureRegistry();
+  // Create message router and feature registry, then register all additional features
+  messageRouter = new MessageRouter();
+  featureRegistry = new FeatureRegistry(messageRouter);
   featureRegistry.register(new WhiteboardFeature());
   featureRegistry.register(new ChatFeature());
   featureRegistry.register(new TerminalFeature());
@@ -79,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        hostSession = new HostSession(statusBar, context, featureRegistry);
+        hostSession = new HostSession(statusBar, context, featureRegistry, messageRouter);
         await hostSession.start();
       } catch (err: any) {
         vscode.window.showErrorMessage(
@@ -215,7 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
+        clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry, messageRouter);
         await clientSession.connect(address, passphrase || undefined);
       } catch (err: any) {
         vscode.window.showErrorMessage(
@@ -377,7 +380,7 @@ async function autoReconnect(address: string, context: vscode.ExtensionContext):
   try {
     const passphrase = await context.secrets.get("pairprog.reconnectPassphrase");
     await context.secrets.delete("pairprog.reconnectPassphrase");
-    clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
+    clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry, messageRouter);
     await clientSession.connect(address, passphrase);
   } catch (err: any) {
     console.warn("[PairProg] Auto-reconnect failed:", err.message);

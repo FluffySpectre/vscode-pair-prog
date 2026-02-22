@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {
   Message,
   MessageType,
+  MessageHandler,
   CursorUpdatePayload,
   FollowUpdatePayload,
   createMessage,
@@ -12,7 +13,8 @@ import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/path
  * CursorSync broadcasts local cursor/selection changes and renders
  * remote partner cursors as decorations in the editor.
  */
-export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvider {
+export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvider, MessageHandler {
+  readonly messageTypes = [MessageType.CursorUpdate, MessageType.FollowUpdate];
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
   private username: string;
@@ -209,6 +211,19 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     };
 
     this.sendFn(createMessage(MessageType.CursorUpdate, payload));
+  }
+
+  // MessageHandler
+
+  handleMessage(msg: Message): void {
+    switch (msg.type) {
+      case MessageType.CursorUpdate:
+        this.handleRemoteCursorUpdate(msg.payload as CursorUpdatePayload);
+        break;
+      case MessageType.FollowUpdate:
+        this.handleRemoteFollowUpdate(msg.payload as FollowUpdatePayload);
+        break;
+    }
   }
 
   // Handle Remote Cursor Updates

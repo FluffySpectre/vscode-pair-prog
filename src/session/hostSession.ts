@@ -7,9 +7,6 @@ import {
   MessageType,
   HelloPayload,
   WelcomePayload,
-  CursorUpdatePayload,
-  FollowUpdatePayload,
-  FileSaveRequestPayload,
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
@@ -23,6 +20,7 @@ import { FileOpsSync } from "../sync/fileOpsSync";
 import { StatusBar } from "../ui/statusBar";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
+import { MessageRouter } from "../network/messageRouter";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -40,6 +38,7 @@ export class HostSession implements vscode.Disposable {
   private fileOpsSync: FileOpsSync | null = null;
   private statusBar: StatusBar;
   private featureRegistry: FeatureRegistry;
+  private messageRouter: MessageRouter;
 
   private username: string;
   private address: string = "";
@@ -51,10 +50,11 @@ export class HostSession implements vscode.Disposable {
   private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DISCONNECT_GRACE_MS = 6000;
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, featureRegistry: FeatureRegistry) {
+  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
     this.statusBar = statusBar;
     this._context = context;
     this.featureRegistry = featureRegistry;
+    this.messageRouter = messageRouter;
     this.server = new PairProgServer();
 
     const config = vscode.workspace.getConfiguration("pairprog");
@@ -237,29 +237,12 @@ export class HostSession implements vscode.Disposable {
   // Message Router
 
   private async onMessage(msg: Message): Promise<void> {
-    switch (msg.type) {
-      case MessageType.CursorUpdate:
-        this.cursorSync?.handleRemoteCursorUpdate(msg.payload as CursorUpdatePayload);
-        break;
-
-      case MessageType.FollowUpdate:
-        this.cursorSync?.handleRemoteFollowUpdate(msg.payload as FollowUpdatePayload);
-        break;
-
-      case MessageType.FileSaveRequest:
-        if (this.documentSync) {
-          await this.documentSync.handleFileSaveRequest(msg.payload as FileSaveRequestPayload);
-        }
-        break;
-
-      case MessageType.FileContentRequest:
-        await this.handleFileContentRequest(msg.payload as FileContentRequestPayload);
-        break;
-
-      default:
-        this.featureRegistry.routeMessage(msg);
-        break;
+    if (msg.type === MessageType.FileContentRequest) {
+      await this.handleFileContentRequest(msg.payload as FileContentRequestPayload);
+      return;
     }
+
+    this.messageRouter.route(msg);
   }
 
   // Sync Setup / Teardown
@@ -288,6 +271,10 @@ export class HostSession implements vscode.Disposable {
     this.fileOpsSync = new FileOpsSync(sendFn, true, wsFolder.uri.fsPath, ignored);
     this.fileOpsSync.activate();
 
+    this.messageRouter.register(this.cursorSync);
+    this.messageRouter.register(this.documentSync);
+    this.messageRouter.register(this.fileOpsSync);
+
     await this.featureRegistry.activateAll({
       sendFn,
       role: "host",
@@ -298,6 +285,10 @@ export class HostSession implements vscode.Disposable {
   }
 
   private teardownSync(): void {
+    if (this.cursorSync) { this.messageRouter.unregister(this.cursorSync); }
+    if (this.documentSync) { this.messageRouter.unregister(this.documentSync); }
+    if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
+
     this.documentSync?.dispose();
     this.documentSync = null;
 

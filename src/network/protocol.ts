@@ -245,6 +245,13 @@ export interface BeaconPayload {
   requiresPassphrase?: boolean;
 }
 
+// Message Handler
+
+export interface MessageHandler {
+  readonly messageTypes: string[];
+  handleMessage(msg: Message): void | Promise<void>;
+}
+
 // Serialization
 
 let _seqCounter = 0;

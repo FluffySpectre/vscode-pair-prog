@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {
   Message,
   MessageType,
+  MessageHandler,
   FileCreatedPayload,
   FileDeletedPayload,
   FileRenamedPayload,
@@ -17,7 +18,7 @@ import { RemoteOpGuard } from "./remoteOpGuard";
  * and propagates them to the client. On the client side, it applies
  * those operations to the virtual filesystem (or disk if no VFS).
  */
-export class FileOpsSync implements vscode.Disposable {
+export class FileOpsSync implements vscode.Disposable, MessageHandler {
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
@@ -38,6 +39,28 @@ export class FileOpsSync implements vscode.Disposable {
     this.workspaceRoot = workspaceRoot;
     this.ignoredPatterns = ignoredPatterns;
     this.vfsProvider = vfsProvider;
+  }
+
+  // MessageHandler — only the client handles incoming file operation messages
+
+  get messageTypes(): string[] {
+    return this.isHost
+      ? []
+      : [MessageType.FileCreated, MessageType.FileDeleted, MessageType.FileRenamed];
+  }
+
+  async handleMessage(msg: Message): Promise<void> {
+    switch (msg.type) {
+      case MessageType.FileCreated:
+        await this.handleFileCreated(msg.payload as FileCreatedPayload);
+        break;
+      case MessageType.FileDeleted:
+        await this.handleFileDeleted(msg.payload as FileDeletedPayload);
+        break;
+      case MessageType.FileRenamed:
+        await this.handleFileRenamed(msg.payload as FileRenamedPayload);
+        break;
+    }
   }
 
   // Activation

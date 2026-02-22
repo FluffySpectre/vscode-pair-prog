@@ -13,6 +13,7 @@ import {
   SessionRole,
 } from "./features";
 import { MessageRouter } from "./network/messageRouter";
+import { decodeInviteCode } from "./network/inviteCode";
 
 const VFS_SCHEME = "pairprog";
 
@@ -45,6 +46,60 @@ export function activate(context: vscode.ExtensionContext) {
   featureRegistry.register(new WhiteboardFeature());
   featureRegistry.register(new ChatFeature());
   featureRegistry.register(new TerminalFeature());
+
+  // URI handler for invite links
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      async handleUri(uri: vscode.Uri) {
+        if (uri.path !== "/join") { return; }
+
+        const params = new URLSearchParams(uri.query);
+        const code = params.get("code");
+        if (!code) {
+          vscode.window.showErrorMessage("Invalid invite link: missing code.");
+          return;
+        }
+
+        if (clientSession?.isActive) {
+          vscode.window.showWarningMessage("Already connected to a session. Leave it first.");
+          return;
+        }
+        if (hostSession?.isActive) {
+          vscode.window.showWarningMessage("You are currently hosting a session. Stop it first.");
+          return;
+        }
+
+        let decoded: { address: string; requiresPassphrase: boolean };
+        try {
+          decoded = decodeInviteCode(code);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Invalid invite code: ${err.message}`);
+          return;
+        }
+
+        const address = decoded.address;
+
+        let passphrase: string | undefined;
+        if (decoded.requiresPassphrase) {
+          passphrase = await vscode.window.showInputBox({
+            prompt: "This session requires a passphrase",
+            password: true,
+            placeHolder: "Passphrase",
+          });
+          if (passphrase === undefined) { return; }
+        }
+
+        try {
+          clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry, messageRouter);
+          await clientSession.connect(address, passphrase || undefined);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to connect: ${err.message}`);
+          clientSession?.dispose();
+          clientSession = null;
+        }
+      },
+    })
+  );
 
   // Check for pending reconnect (extension was reloaded after adding first workspace folder)
   const pending = context.globalState.get<{ address: string }>("pairprog.pendingReconnect");
@@ -328,6 +383,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         items.push(
+          { label: "$(link) Copy Invite Link", description: "" },
           { label: "$(copy) Copy Session Address", description: statusBar.getAddress() },
           { label: "$(info) About", description: "" },
           { label: "$(debug-stop) Stop Hosting", description: "" },
@@ -366,6 +422,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.executeCommand("pairprog.toggleFollowMode");
       } else if (picked.label.includes("Jump to Partner")) {
         vscode.commands.executeCommand("pairprog.jumpToPartner");
+      } else if (picked.label.includes("Copy Invite Link")) {
+        if (hostSession) {
+          await vscode.env.clipboard.writeText(hostSession.inviteLink);
+          vscode.window.showInformationMessage("Invite link copied!");
+        }
       } else if (picked.label.includes("Copy Session Address")) {
         await vscode.env.clipboard.writeText(statusBar.getAddress());
         vscode.window.showInformationMessage("Session address copied!");

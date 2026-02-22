@@ -12,6 +12,9 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onUri"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [

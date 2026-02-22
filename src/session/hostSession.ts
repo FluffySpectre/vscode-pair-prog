@@ -22,6 +22,7 @@ import { StatusBar } from "../ui/statusBar";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
+import { encodeInviteCode } from "../network/inviteCode";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -43,6 +44,7 @@ export class HostSession implements vscode.Disposable {
 
   private username: string;
   private address: string = "";
+  private _inviteLink: string = "";
   private clientUsername: string = "";
   private passphrase: string = "";
   private broadcaster: BeaconBroadcaster | null = null;
@@ -81,6 +83,11 @@ export class HostSession implements vscode.Disposable {
 
     this.address = await this.server.start(port);
     this.sharedbServer = new ShareDBServer(this.server);
+
+    // Generate invite code and link
+    let inviteCode = encodeInviteCode(this.address, !!this.passphrase);
+    this._inviteLink = `vscode://bjoernbosse.vscode-pair-prog/join?code=${inviteCode}`;
+
     this.statusBar.setHosting(this.address);
 
     const wsFolder = vscode.workspace.workspaceFolders?.[0];
@@ -96,10 +103,13 @@ export class HostSession implements vscode.Disposable {
     this.broadcaster.start();
 
     vscode.window.showInformationMessage(
-      `Pair Programming session started on ${this.address}`,
+      `Pair Programming session started`,
+      "Copy Invite Link",
       "Copy Address"
     ).then((action) => {
-      if (action === "Copy Address") {
+      if (action === "Copy Invite Link") {
+        vscode.env.clipboard.writeText(this._inviteLink);
+      } else if (action === "Copy Address") {
         vscode.env.clipboard.writeText(this.address);
       }
     });
@@ -391,6 +401,10 @@ export class HostSession implements vscode.Disposable {
 
   async jumpToPartner(): Promise<void> {
     await this.cursorSync?.jumpToPartner();
+  }
+
+  get inviteLink(): string {
+    return this._inviteLink;
   }
 
   get isActive(): boolean {

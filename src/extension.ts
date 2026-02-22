@@ -375,8 +375,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 async function autoReconnect(address: string, context: vscode.ExtensionContext): Promise<void> {
   try {
+    const passphrase = await context.secrets.get("pairprog.reconnectPassphrase");
+    await context.secrets.delete("pairprog.reconnectPassphrase");
     clientSession = new ClientSession(statusBar, context, vfsProvider, featureRegistry);
-    await clientSession.connect(address);
+    await clientSession.connect(address, passphrase);
   } catch (err: any) {
     console.warn("[PairProg] Auto-reconnect failed:", err.message);
     clientSession?.dispose();

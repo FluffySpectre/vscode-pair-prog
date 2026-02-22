@@ -52,6 +52,7 @@ export class ClientSession implements vscode.Disposable {
 
   private username: string;
   private address: string = "";
+  private passphrase: string | undefined;
   private hostUsername: string = "";
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
@@ -72,6 +73,7 @@ export class ClientSession implements vscode.Disposable {
 
   async connect(address: string, passphrase?: string): Promise<void> {
     this.address = address;
+    this.passphrase = passphrase;
 
     const hello: HelloPayload = {
       username: this.username,
@@ -166,6 +168,11 @@ export class ClientSession implements vscode.Disposable {
       const numFolders = vscode.workspace.workspaceFolders?.length || 0;
 
       await this._context.globalState.update("pairprog.pendingReconnect", { address: this.address });
+      if (this.passphrase) {
+        await this._context.secrets.store("pairprog.reconnectPassphrase", this.passphrase);
+      } else {
+        await this._context.secrets.delete("pairprog.reconnectPassphrase");
+      }
 
       vscode.workspace.updateWorkspaceFolders(numFolders, 0, {
         uri: wsUri,

@@ -22,9 +22,14 @@ export class ShareDBBridge implements vscode.Disposable {
   private batchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private readonly BATCH_WINDOW_MS = 50;
   private opQueues: Map<string, Promise<void>> = new Map();
+  private _readonly = false;
 
   constructor(connection: Connection) {
     this.connection = connection;
+  }
+
+  setReadonly(readonly: boolean): void {
+    this._readonly = readonly;
   }
 
   activate(): void {
@@ -122,6 +127,10 @@ export class ShareDBBridge implements vscode.Disposable {
     }
 
     if (e.contentChanges.length === 0) {
+      return;
+    }
+
+    if (this._readonly) {
       return;
     }
 

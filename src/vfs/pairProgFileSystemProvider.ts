@@ -21,9 +21,34 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
   private tree = new Map<string, TreeEntry>();
   private requestSender: ((path: string) => void) | null = null;
   private pendingContentRequests = new Map<string, (content: Uint8Array) => void>();
+  private _readonly = true;
 
   private _onDidChangeFile = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
   readonly onDidChangeFile = this._onDidChangeFile.event;
+
+  setReadonly(readonly: boolean): void {
+    if (this._readonly === readonly) { return; }
+    this._readonly = readonly;
+
+    // Fire change events for all files so VS Code re-stats them and
+    // picks up the new permission flag
+    const events: vscode.FileChangeEvent[] = [];
+    for (const [entryPath, entry] of this.tree) {
+      if (entry.type === vscode.FileType.File) {
+        events.push({
+          type: vscode.FileChangeType.Changed,
+          uri: this.pathToUri(entryPath),
+        });
+      }
+    }
+    if (events.length > 0) {
+      this._onDidChangeFile.fire(events);
+    }
+  }
+
+  get isReadonly(): boolean {
+    return this._readonly;
+  }
 
   setRequestSender(fn: (path: string) => void): void {
     this.requestSender = fn;
@@ -146,6 +171,7 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
   clear(): void {
     this.tree.clear();
     this.requestSender = null;
+    this._readonly = true;
   }
 
   teardown(): void {
@@ -191,12 +217,16 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
     if (!entry) {
       throw vscode.FileSystemError.FileNotFound(uri);
     }
-    return {
+    const result: vscode.FileStat = {
       type: entry.type,
       ctime: entry.mtime,
       mtime: entry.mtime,
       size: entry.size,
     };
+    if (this._readonly && entry.type === vscode.FileType.File) {
+      result.permissions = vscode.FilePermission.Readonly;
+    }
+    return result;
   }
 
   readDirectory(uri: vscode.Uri): [string, vscode.FileType][] {

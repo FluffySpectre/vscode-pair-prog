@@ -50,6 +50,7 @@ export class ClientSession implements vscode.Disposable {
   private address: string = "";
   private passphrase: string | undefined;
   private hostUsername: string = "";
+  private _isReadonly = true;
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
@@ -127,6 +128,7 @@ export class ClientSession implements vscode.Disposable {
   private onConnected(welcome: WelcomePayload): void {
     this.hostUsername = welcome.hostUsername;
     this._openFiles = welcome.openFiles || [];
+    this._isReadonly = welcome.readonly !== false;
     this.statusBar.setConnected(this.address, this.hostUsername);
 
     vscode.window.showInformationMessage(
@@ -142,6 +144,19 @@ export class ClientSession implements vscode.Disposable {
     this.vfsProvider.teardown();
     this.statusBar.setDisconnected();
     vscode.window.showWarningMessage("Disconnected from pair programming session.");
+  }
+
+  // Edit Permission
+
+  private onEditPermissionGranted(): void {
+    this._isReadonly = false;
+    this.vfsProvider.setReadonly(false);
+    this.sharedbBridge?.setReadonly(false);
+    this.documentSync?.setReadonly(false);
+    this.statusBar.setEditAccess(true);
+    vscode.window.showInformationMessage(
+      `${this.hostUsername} granted you editing access.`
+    );
   }
 
   // Virtual Filesystem Setup
@@ -179,6 +194,11 @@ export class ClientSession implements vscode.Disposable {
 
     await this.setupSync();
 
+    // Apply readonly state to sync layers
+    this.vfsProvider.setReadonly(this._isReadonly);
+    this.sharedbBridge?.setReadonly(this._isReadonly);
+    this.documentSync?.setReadonly(this._isReadonly);
+
     this.cursorSync!.sendCurrentCursor();
 
     // Open the files that the host currently has open
@@ -211,6 +231,10 @@ export class ClientSession implements vscode.Disposable {
 
       case MessageType.FileContentResponse:
         this.vfsProvider.handleContentResponse(msg.payload as FileContentResponsePayload);
+        return;
+
+      case MessageType.EditPermissionGranted:
+        this.onEditPermissionGranted();
         return;
     }
 
@@ -264,6 +288,8 @@ export class ClientSession implements vscode.Disposable {
   }
 
   private teardownSync(): void {
+    this._isReadonly = true;
+
     if (this.cursorSync) { this.messageRouter.unregister(this.cursorSync); }
     if (this.documentSync) { this.messageRouter.unregister(this.documentSync); }
     if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
@@ -304,6 +330,10 @@ export class ClientSession implements vscode.Disposable {
 
   get isActive(): boolean {
     return this.client.isConnected;
+  }
+
+  get isReadonly(): boolean {
+    return this._isReadonly;
   }
 
   // Dispose

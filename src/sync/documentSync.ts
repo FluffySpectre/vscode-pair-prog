@@ -21,11 +21,16 @@ export class DocumentSync implements vscode.Disposable, MessageHandler {
   private sendFn: (msg: Message) => void;
   private isHost: boolean;
   private vfsProvider?: PairProgFileSystemProvider;
+  private _readonly = false;
 
   constructor(sendFn: (msg: Message) => void, isHost: boolean, vfsProvider?: PairProgFileSystemProvider) {
     this.sendFn = sendFn;
     this.isHost = isHost;
     this.vfsProvider = vfsProvider;
+  }
+
+  setReadonly(readonly: boolean): void {
+    this._readonly = readonly;
   }
 
   // MessageHandler
@@ -50,6 +55,9 @@ export class DocumentSync implements vscode.Disposable, MessageHandler {
     if (!this.isHost) {
       this.disposables.push(
         vscode.workspace.onWillSaveTextDocument((e) => {
+          if (this._readonly) {
+            return;
+          }
           if (!isSyncableDocument(e.document.uri)) {
             return;
           }

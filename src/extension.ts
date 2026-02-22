@@ -272,6 +272,18 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Grant Edit Access
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pairprog.grantEditAccess", () => {
+      if (!hostSession?.isActive) {
+        vscode.window.showWarningMessage("No active hosting session.");
+        return;
+      }
+      hostSession.grantEditAccess();
+    })
+  );
+
   for (const cmd of featureRegistry.getCommands()) {
     context.subscriptions.push(
       vscode.commands.registerCommand(cmd.commandId, async () => {
@@ -303,6 +315,12 @@ export function activate(context: vscode.ExtensionContext) {
           { label: "$(eye) Toggle Follow Mode", description: "" },
           { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
         );
+
+        if (!hostSession.hasGrantedEditAccess) {
+          items.push({ label: "$(lock) Grant Edit Access", description: "Allow partner to edit files" });
+        } else {
+          items.push({ label: "$(check) Edit Access Granted", description: "Partner can edit files" });
+        }
 
         // Add feature items for host role
         for (const cmd of featureRegistry.getCommands("host" as SessionRole)) {
@@ -359,6 +377,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.executeCommand("pairprog.startSession");
       } else if (picked.label.includes("Join Session")) {
         vscode.commands.executeCommand("pairprog.joinSession");
+      } else if (picked.label.includes("Grant Edit Access")) {
+        vscode.commands.executeCommand("pairprog.grantEditAccess");
       } else if (picked.label.includes("About")) {
         vscode.commands.executeCommand("pairprog.openAbout");
       } else {

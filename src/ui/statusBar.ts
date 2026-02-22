@@ -16,6 +16,7 @@ export class StatusBar implements vscode.Disposable {
   private state: ConnectionState = ConnectionState.Idle;
   private address: string = "";
   private partnerName: string = "";
+  private hasEditAccess = false;
   private autoHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -52,10 +53,24 @@ export class StatusBar implements vscode.Disposable {
     this.state = ConnectionState.Connected;
     this.address = address;
     this.partnerName = hostName;
-    this.item.text = `$(plug) Connected to ${hostName}`;
-    this.item.tooltip = `Connected to ${address}.\nPair Programming with ${hostName}.\nClick for options.`;
+    this.hasEditAccess = false;
+    this.item.text = `$(lock) Connected to ${hostName} (readonly)`;
+    this.item.tooltip = `Connected to ${address}.\nPair Programming with ${hostName} (readonly).\nClick for options.`;
     this.item.backgroundColor = undefined;
     this.item.show();
+  }
+
+  setEditAccess(hasAccess: boolean): void {
+    this.hasEditAccess = hasAccess;
+    if (this.state === ConnectionState.Connected) {
+      if (hasAccess) {
+        this.item.text = `$(plug) Connected to ${this.partnerName}`;
+        this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.partnerName}.\nClick for options.`;
+      } else {
+        this.item.text = `$(lock) Connected to ${this.partnerName} (readonly)`;
+        this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.partnerName} (readonly).\nClick for options.`;
+      }
+    }
   }
 
   setFollowing(following: boolean): void {
@@ -66,8 +81,10 @@ export class StatusBar implements vscode.Disposable {
       this.item.text = `$(broadcast) Hosting: ${this.partnerName} connected`;
       this.item.tooltip = `Pair Programming with ${this.partnerName}.\nSession address: ${this.address}\nClick for options.`;
     } else if (this.state === ConnectionState.Connected) {
-      this.item.text = `$(plug) Connected to ${this.partnerName}`;
-      this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.partnerName}.\nClick for options.`;
+      const suffix = this.hasEditAccess ? "" : " (readonly)";
+      const icon = this.hasEditAccess ? "$(plug)" : "$(lock)";
+      this.item.text = `${icon} Connected to ${this.partnerName}${suffix}`;
+      this.item.tooltip = `Connected to ${this.address}.\nPair Programming with ${this.partnerName}${suffix}.\nClick for options.`;
     }
   }
 

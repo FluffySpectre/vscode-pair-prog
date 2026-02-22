@@ -7,6 +7,7 @@ import {
   MessageType,
   HelloPayload,
   WelcomePayload,
+  EditPermissionGrantedPayload,
   FileContentRequestPayload,
   FileContentResponsePayload,
   createMessage,
@@ -46,6 +47,7 @@ export class HostSession implements vscode.Disposable {
   private passphrase: string = "";
   private broadcaster: BeaconBroadcaster | null = null;
   private isStopping = false;
+  private _editAccessGranted = false;
   private _context: vscode.ExtensionContext;
   private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DISCONNECT_GRACE_MS = 6000;
@@ -127,6 +129,7 @@ export class HostSession implements vscode.Disposable {
 
   stop(): void {
     this.isStopping = true;
+    this._editAccessGranted = false;
     if (this.disconnectGraceTimer) {
       clearTimeout(this.disconnectGraceTimer);
       this.disconnectGraceTimer = null;
@@ -185,7 +188,12 @@ export class HostSession implements vscode.Disposable {
     await this.setupSync();
 
     const openFiles = this.getOpenTextFiles();
-    const welcome: WelcomePayload = { hostUsername: this.username, openFiles, protocolVersion: PROTOCOL_VERSION };
+    const welcome: WelcomePayload = {
+      hostUsername: this.username,
+      openFiles,
+      protocolVersion: PROTOCOL_VERSION,
+      readonly: !this._editAccessGranted,
+    };
     this.server.send(createMessage(MessageType.Welcome, welcome));
 
     // Send directory tree so the client can build its virtual workspace
@@ -215,6 +223,13 @@ export class HostSession implements vscode.Disposable {
     }
 
     this.cursorSync!.sendCurrentCursor();
+
+    // Re-grant edit access on reconnect if it was previously granted
+    if (this._editAccessGranted) {
+      this.server.send(
+        createMessage(MessageType.EditPermissionGranted, {} as EditPermissionGrantedPayload)
+      );
+    }
   }
 
   // Client Disconnected
@@ -348,6 +363,26 @@ export class HostSession implements vscode.Disposable {
       }
     }
     return files;
+  }
+
+  grantEditAccess(): void {
+    if (!this.clientUsername) {
+      vscode.window.showWarningMessage("No client connected to grant edit access to.");
+      return;
+    }
+    if (this._editAccessGranted) {
+      vscode.window.showInformationMessage(`${this.clientUsername} already has editing access.`);
+      return;
+    }
+    this._editAccessGranted = true;
+    this.server.send(
+      createMessage(MessageType.EditPermissionGranted, {} as EditPermissionGrantedPayload)
+    );
+    vscode.window.showInformationMessage(`Granted editing access to ${this.clientUsername}.`);
+  }
+
+  get hasGrantedEditAccess(): boolean {
+    return this._editAccessGranted;
   }
 
   toggleFollowMode(): void {

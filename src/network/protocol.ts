@@ -1,7 +1,7 @@
 // Protocol version
 // Increment whenever the message format changes in a backwards-incompatible way. 
 // Both sides reject a connection if the versions do not match exactly.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 // Message Types
 
@@ -41,6 +41,9 @@ export enum MessageType {
   FileContentRequest = "fileContentRequest",
   FileContentResponse = "fileContentResponse",
 
+  // Permissions
+  EditPermissionGranted = "editPermissionGranted",
+
   // Lifecycle
   Ping = "ping",
   Pong = "pong",
@@ -70,6 +73,7 @@ export interface WelcomePayload {
   hostUsername: string;
   openFiles: string[]; // workspace-relative paths of open documents
   protocolVersion: number;
+  readonly: boolean; // true = client starts in readonly mode
 }
 
 export interface CursorPosition {
@@ -202,6 +206,8 @@ export interface TerminalOutputPayload {
 }
 
 export interface TerminalClearPayload {}
+
+export interface EditPermissionGrantedPayload {}
 
 export interface ErrorPayload {
   message: string;

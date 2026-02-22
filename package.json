@@ -58,6 +58,10 @@
       {
         "command": "pairprog.stopSharingTerminal",
         "title": "PairProg: Stop Sharing Terminal"
+      },
+      {
+        "command": "pairprog.grantEditAccess",
+        "title": "PairProg: Grant Edit Access"
       }
     ],
     "keybindings": [

@@ -21,6 +21,7 @@ export class ShareDBBridge implements vscode.Disposable {
   private pendingOps: Map<string, OtTextOp> = new Map();
   private batchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private readonly BATCH_WINDOW_MS = 50;
+  private opQueues: Map<string, Promise<void>> = new Map();
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -90,9 +91,10 @@ export class ShareDBBridge implements vscode.Disposable {
       throw err;
     }
 
-    // Listen for remote operations
     doc.on("op", (op: OtTextOp, source: any) => {
-      this.onRemoteOp(filePath, op, source);
+      const prev = this.opQueues.get(filePath) ?? Promise.resolve();
+      const next = prev.then(() => this.onRemoteOp(filePath, op, source));
+      this.opQueues.set(filePath, next.catch(() => {}));
     });
 
     // If local VS Code doc text differs from ShareDB doc, sync it
@@ -109,6 +111,7 @@ export class ShareDBBridge implements vscode.Disposable {
       doc.destroy();
       this.docs.delete(filePath);
     }
+    this.opQueues.delete(filePath);
   }
 
   // Local edits -> ShareDB ops
@@ -137,21 +140,17 @@ export class ShareDBBridge implements vscode.Disposable {
     }
 
     for (const change of e.contentChanges) {
-      const op = this.changeToOp(doc.data, change);
+      const op = this.changeToOp(change);
       if (op.length > 0) {
-        this.scheduleOp(filePath, doc, op);
+        this.scheduleOp(filePath, op);
       }
     }
   }
 
-  // Convert a single VS Code content change to an ot-text op
-  private changeToOp(
-    preText: string,
-    change: vscode.TextDocumentContentChangeEvent
-  ): OtTextOp {
-    const docLen = preText.length; // UTF-16 code unit count
-    const offset = Math.min(change.rangeOffset, docLen);
-    const deleteLen = Math.min(change.rangeLength, docLen - offset);
+  // Convert a single VS Code content change to an ot-text op.
+  private changeToOp(change: vscode.TextDocumentContentChangeEvent): OtTextOp {
+    const offset = change.rangeOffset;
+    const deleteLen = change.rangeLength;
 
     const op: OtTextOp = [];
 
@@ -175,7 +174,7 @@ export class ShareDBBridge implements vscode.Disposable {
 
   // Batch local ops before submitting to reduce round-trips
 
-  private scheduleOp(filePath: string, doc: Doc<string>, op: OtTextOp): void {
+  private scheduleOp(filePath: string, op: OtTextOp): void {
     // Compose the new op onto any already-pending op for this file
     const existing = this.pendingOps.get(filePath);
     let composed: OtTextOp;
@@ -194,15 +193,19 @@ export class ShareDBBridge implements vscode.Disposable {
     }
     this.batchTimers.set(
       filePath,
-      setTimeout(() => this.flushOp(filePath, doc), this.BATCH_WINDOW_MS)
+      setTimeout(() => this.flushOp(filePath), this.BATCH_WINDOW_MS)
     );
   }
 
-  private flushOp(filePath: string, doc: Doc<string>): void {
+  private flushOp(filePath: string): void {
     this.batchTimers.delete(filePath);
     const op = this.pendingOps.get(filePath);
     if (!op) { return; }
     this.pendingOps.delete(filePath);
+
+    const doc = this.docs.get(filePath);
+    if (!doc || !doc.type) { return; }
+
     doc.submitOp(op, { source: true });
   }
 
@@ -238,7 +241,6 @@ export class ShareDBBridge implements vscode.Disposable {
         // Insert at cursor position
         const pos = doc.positionAt(cursor);
         workspaceEdit.insert(uri, pos, component);
-        // Don't advance cursor
       } else if (typeof component === "object" && component.d !== undefined) {
         // Delete characters at cursor
         const startPos = doc.positionAt(cursor);
@@ -288,6 +290,7 @@ export class ShareDBBridge implements vscode.Disposable {
     }
     this.batchTimers.clear();
     this.pendingOps.clear();
+    this.opQueues.clear();
 
     for (const doc of this.docs.values()) {
       doc.unsubscribe();

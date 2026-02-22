@@ -311,15 +311,28 @@ export class PairProgFileSystemProvider implements vscode.FileSystemProvider {
   }
 
   private pathToUri(normalizedPath: string): vscode.Uri {
-    const wsFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!wsFolder || wsFolder.uri.scheme !== PairProgFileSystemProvider.SCHEME) {
-      // Fallback - shouldn't happen in normal flow
+    const wsFolder = vscode.workspace.workspaceFolders?.find(
+      (f) => f.uri.scheme === PairProgFileSystemProvider.SCHEME
+    );
+    if (!wsFolder) {
+      // Fallback
       return vscode.Uri.parse(PairProgFileSystemProvider.SCHEME + ":/" + normalizedPath);
     }
     return vscode.Uri.joinPath(wsFolder.uri, normalizedPath);
   }
 
   private requestContent(relativePath: string): Promise<Uint8Array> {
+    const existing = this.pendingContentRequests.get(relativePath);
+    if (existing) {
+      return new Promise<Uint8Array>((resolve) => {
+        const originalResolve = existing;
+        this.pendingContentRequests.set(relativePath, (content) => {
+          originalResolve(content);
+          resolve(content);
+        });
+      });
+    }
+
     return new Promise<Uint8Array>((resolve) => {
       this.pendingContentRequests.set(relativePath, resolve);
       this.requestSender!(relativePath);

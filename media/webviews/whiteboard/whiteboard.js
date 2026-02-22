@@ -42,6 +42,12 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let panStartOffset = { x: 0, y: 0 };
 let spaceDown = false;
+
+// Remote cursor state
+let remoteCursor = null; // { x, y, username } in world coords, or null when not visible
+let remoteCursorColor = "#ec15ef"; // updated from pairprog.highlightColor via config message
+let cursorSendThrottleTs = 0;
+const CURSOR_THROTTLE_MS = 50;
 // Device pixel ratio — kept in sync with the display in resize()
 let dpr = window.devicePixelRatio || 1;
 
@@ -288,6 +294,41 @@ function redrawAll() {
   }
 
   ctx.restore(); // restore identity transform
+
+  // Draw remote cursor on top (screen space, outside the world transform)
+  if (remoteCursor) {
+    const sc = worldToScreen(remoteCursor.x, remoteCursor.y);
+    drawRemoteCursor(sc.x, sc.y, remoteCursor.username);
+  }
+}
+
+// --- Remote cursor rendering (screen space) ---
+function drawRemoteCursor(sx, sy, username) {
+  ctx.save();
+  // Crosshair lines
+  ctx.strokeStyle = remoteCursorColor;
+  ctx.lineWidth = 1.5 * dpr;
+  const r = 8 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(sx * dpr - r, sy * dpr);
+  ctx.lineTo(sx * dpr + r, sy * dpr);
+  ctx.moveTo(sx * dpr, sy * dpr - r);
+  ctx.lineTo(sx * dpr, sy * dpr + r);
+  ctx.stroke();
+  // Username label
+  if (username) {
+    ctx.font = (11 * dpr) + "px sans-serif";
+    const tw = ctx.measureText(username).width;
+    const lx = (sx + 10) * dpr;
+    const ly = (sy - 10) * dpr;
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.beginPath();
+    ctx.roundRect(lx - 3 * dpr, ly - 11 * dpr, tw + 8 * dpr, 16 * dpr, 3 * dpr);
+    ctx.fill();
+    ctx.fillStyle = remoteCursorColor;
+    ctx.fillText(username, lx + 1 * dpr, ly + 1 * dpr);
+  }
+  ctx.restore();
 }
 
 // --- Canvas resize ---
@@ -638,6 +679,14 @@ canvas.addEventListener("pointerdown", e => {
 });
 
 canvas.addEventListener("pointermove", e => {
+  // Throttled cursor position broadcast to partner
+  const now = Date.now();
+  if (now - cursorSendThrottleTs >= CURSOR_THROTTLE_MS) {
+    cursorSendThrottleTs = now;
+    const { x: wx, y: wy } = screenToWorld(e.offsetX, e.offsetY);
+    vscode.postMessage({ type: "cursorMove", payload: { x: wx, y: wy } });
+  }
+
   if (isPanning) {
     viewOffset.x = panStartOffset.x + (e.clientX - panStart.x);
     viewOffset.y = panStartOffset.y + (e.clientY - panStart.y);
@@ -976,6 +1025,9 @@ function handlePointerUp(e) {
 }
 canvas.addEventListener("pointerup", handlePointerUp);
 canvas.addEventListener("pointercancel", handlePointerUp);
+canvas.addEventListener("pointerleave", () => {
+  vscode.postMessage({ type: "cursorMove", payload: { visible: false } });
+});
 
 // --- Double-click to edit text ---
 canvas.addEventListener("dblclick", e => {
@@ -1203,6 +1255,19 @@ window.addEventListener("message", event => {
         entities.set(e.id, e);
       }
       redrawAll();
+      break;
+    case "cursorUpdate":
+      if (msg.payload.visible === false) {
+        remoteCursor = null;
+      } else {
+        remoteCursor = { x: msg.payload.x, y: msg.payload.y, username: msg.payload.username };
+      }
+      redrawAll();
+      break;
+    case "config":
+      if (msg.payload.highlightColor) {
+        remoteCursorColor = msg.payload.highlightColor;
+      }
       break;
   }
 });

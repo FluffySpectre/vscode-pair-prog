@@ -9,6 +9,7 @@ import {
   WhiteboardEntityUpdatePayload,
   WhiteboardEntityDeletePayload,
   WhiteboardFullSyncPayload,
+  WhiteboardCursorUpdatePayload,
   createMessage,
 } from "../../network/protocol";
 
@@ -17,14 +18,20 @@ export class WhiteboardPanel {
   private sendFn: (msg: Message) => void;
   private _disposed = false;
   private entities: Map<string, WhiteboardEntity>;
+  private username: string;
+  private highlightColor: string;
 
   constructor(
     context: vscode.ExtensionContext,
     sendFn: (msg: Message) => void,
-    entities: Map<string, WhiteboardEntity>
+    entities: Map<string, WhiteboardEntity>,
+    username: string
   ) {
     this.sendFn = sendFn;
     this.entities = entities;
+    this.username = username;
+    const config = vscode.workspace.getConfiguration("pairprog");
+    this.highlightColor = config.get<string>("highlightColor") || "#ec15ef";
 
     const mediaDir = vscode.Uri.joinPath(context.extensionUri, "media");
 
@@ -77,6 +84,20 @@ export class WhiteboardPanel {
             type: "fullSync",
             payload: { entities: Array.from(this.entities.values()) },
           });
+          this.panel.webview.postMessage({
+            type: "config",
+            payload: { highlightColor: this.highlightColor },
+          });
+          break;
+        }
+        case "cursorMove": {
+          const payload: WhiteboardCursorUpdatePayload = {
+            username: this.username,
+            x: msg.payload.x ?? 0,
+            y: msg.payload.y ?? 0,
+            visible: msg.payload.visible !== false,
+          };
+          this.sendFn(createMessage(MessageType.WhiteboardCursorUpdate, payload));
           break;
         }
         case "savePng": {
@@ -137,6 +158,10 @@ export class WhiteboardPanel {
 
   handleRemoteClear() {
     this.panel.webview.postMessage({ type: "clear" });
+  }
+
+  handleRemoteCursorUpdate(payload: WhiteboardCursorUpdatePayload) {
+    this.panel.webview.postMessage({ type: "cursorUpdate", payload });
   }
 
   getEntities(): WhiteboardEntity[] {

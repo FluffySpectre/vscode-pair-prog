@@ -6,6 +6,7 @@ import {
   WhiteboardEntityUpdatePayload,
   WhiteboardEntityDeletePayload,
   WhiteboardFullSyncPayload,
+  WhiteboardCursorUpdatePayload,
   createMessage,
 } from "../../network/protocol";
 import { WhiteboardPanel } from "./whiteboardPanel";
@@ -19,6 +20,7 @@ export class WhiteboardFeature implements Feature {
     MessageType.WhiteboardEntityDelete as string,
     MessageType.WhiteboardFullSync as string,
     MessageType.WhiteboardClear as string,
+    MessageType.WhiteboardCursorUpdate as string,
   ];
 
   private context?: FeatureContext;
@@ -76,6 +78,12 @@ export class WhiteboardFeature implements Feature {
         this.entities.clear();
         this.panel?.handleRemoteClear();
         break;
+
+      case MessageType.WhiteboardCursorUpdate: {
+        const payload = msg.payload as WhiteboardCursorUpdatePayload;
+        this.panel?.handleRemoteCursorUpdate(payload);
+        break;
+      }
     }
   }
 
@@ -111,7 +119,8 @@ export class WhiteboardFeature implements Feature {
       this.panel = new WhiteboardPanel(
         this.context.extensionContext,
         this.context.sendFn,
-        this.entities
+        this.entities,
+        this.context.username
       );
     }
   }

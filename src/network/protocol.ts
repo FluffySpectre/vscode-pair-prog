@@ -27,6 +27,7 @@ export enum MessageType {
   WhiteboardEntityDelete = "whiteboardEntityDelete",
   WhiteboardFullSync = "whiteboardFullSync",
   WhiteboardClear = "whiteboardClear",
+  WhiteboardCursorUpdate = "whiteboardCursorUpdate",
 
   // Chat
   ChatMessage = "chatMessage",
@@ -182,6 +183,13 @@ export interface WhiteboardFullSyncPayload {
 }
 
 export interface WhiteboardClearPayload {}
+
+export interface WhiteboardCursorUpdatePayload {
+  username: string;
+  x: number;        // world-space X coordinate
+  y: number;        // world-space Y coordinate
+  visible: boolean; // false when cursor leaves the whiteboard canvas
+}
 
 export interface ChatMessagePayload {
   text: string;

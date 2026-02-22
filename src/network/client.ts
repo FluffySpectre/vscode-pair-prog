@@ -170,7 +170,7 @@ export class PairProgClient extends EventEmitter {
 
           case MessageType.Error: {
             const errorPayload = msg.payload as { message: string; code?: string };
-            if (errorPayload.code === "AUTH_FAILED" || errorPayload.code === "VERSION_MISMATCH") {
+            if (errorPayload.code === "AUTH_FAILED" || errorPayload.code === "VERSION_MISMATCH" || errorPayload.code === "SESSION_FULL") {
               this.intentionalDisconnect = true;
               this.stopReconnect();
               this.stopHeartbeat();

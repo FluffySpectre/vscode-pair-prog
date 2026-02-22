@@ -407,6 +407,10 @@ export class HostSession implements vscode.Disposable {
     return this._inviteLink;
   }
 
+  get sessionAddress(): string {
+    return this.address;
+  }
+
   get isActive(): boolean {
     return this.server.isRunning;
   }

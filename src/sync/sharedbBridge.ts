@@ -59,20 +59,9 @@ export class ShareDBBridge implements vscode.Disposable {
     const doc = this.connection.get("files", filePath);
     this.docs.set(filePath, doc);
 
-    await new Promise<void>((resolve, reject) => {
-      doc.subscribe((err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-
-    // If the doc doesn't exist yet and we have initial content, create it
-    if (doc.type === null && initialContent !== undefined) {
+    try {
       await new Promise<void>((resolve, reject) => {
-        doc.create(initialContent, "http://sharejs.org/types/textv1", (err) => {
+        doc.subscribe((err) => {
           if (err) {
             reject(err);
           } else {
@@ -80,6 +69,25 @@ export class ShareDBBridge implements vscode.Disposable {
           }
         });
       });
+
+      // If the doc doesn't exist yet and we have initial content, create it
+      if (doc.type === null && initialContent !== undefined) {
+        await new Promise<void>((resolve, reject) => {
+          doc.create(initialContent, "http://sharejs.org/types/textv1", (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+      }
+    } catch (err) {
+      // Remove the doc from the map so the next open can retry cleanly
+      this.docs.delete(filePath);
+      doc.unsubscribe();
+      doc.destroy();
+      throw err;
     }
 
     // Listen for remote operations

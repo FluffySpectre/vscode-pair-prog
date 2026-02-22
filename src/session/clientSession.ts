@@ -196,6 +196,7 @@ export class ClientSession implements vscode.Disposable {
         const uri = toAbsoluteUri(filePath);
         const doc = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+        await this.sharedbBridge!.ensureDoc(filePath, doc.getText());
       } catch {
         // File might not exist in the tree, skip silently
       }

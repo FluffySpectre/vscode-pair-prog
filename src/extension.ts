@@ -298,12 +298,12 @@ export function activate(context: vscode.ExtensionContext) {
       if (hostSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
-          { label: "$(location) Jump to Partner", description: "" },
+          { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
         );
 
         // Add feature items for host role
         for (const cmd of featureRegistry.getCommands("host" as SessionRole)) {
-          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: "" });
+          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
         }
 
         items.push(
@@ -314,12 +314,12 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (clientSession?.isActive) {
         items.push(
           { label: "$(eye) Toggle Follow Mode", description: "" },
-          { label: "$(location) Jump to Partner", description: "" },
+          { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
         );
 
         // Add feature items for client role
         for (const cmd of featureRegistry.getCommands("client" as SessionRole)) {
-          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: "" });
+          items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
         }
 
         items.push(

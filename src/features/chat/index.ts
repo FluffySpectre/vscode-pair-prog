@@ -35,6 +35,7 @@ export class ChatFeature implements Feature {
       {
         commandId: "pairprog.sendMessage",
         label: "Send Message",
+        description: "(Ctrl+Shift+M)",
         icon: "comment",
         roles: ["host", "client"],
         execute: () => this.sendMessage(),

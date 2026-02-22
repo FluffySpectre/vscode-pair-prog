@@ -14,6 +14,7 @@ export interface FeatureContext {
 export interface FeatureCommand {
   commandId: string; // Unique command ID (needs to be registered in package.json)
   label: string;
+  description?: string;
   icon: string;
   roles: SessionRole[]; // Roles that can execute this command
   execute: () => void | Promise<void>;

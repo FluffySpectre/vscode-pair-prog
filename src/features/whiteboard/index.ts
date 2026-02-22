@@ -84,6 +84,7 @@ export class WhiteboardFeature implements Feature {
       {
         commandId: "pairprog.openWhiteboard",
         label: "Open Whiteboard",
+        description: "(Ctrl+Shift+W)",
         icon: "edit",
         roles: ["host", "client"],
         execute: () => this.openWhiteboard(),

@@ -70,6 +70,11 @@
         "command": "pairprog.jumpToPartner",
         "key": "ctrl+shift+j",
         "mac": "cmd+shift+j"
+      },
+      {
+        "command": "pairprog.openWhiteboard",
+        "key": "ctrl+shift+w",
+        "mac": "cmd+shift+w"
       }
     ],
     "configuration": {

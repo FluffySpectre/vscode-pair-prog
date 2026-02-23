@@ -9,16 +9,31 @@ Real-time peer-to-peer pair programming on a shared workspace.
 1. Open a workspace (e.g., a git repo)
 2. Run command: **PairProg: Start Hosting Session** (`Ctrl+Shift+P`)
 3. Optionally set a passphrase to protect the session
-4. Copy the displayed address (e.g., `192.168.1.5:9876`)
-5. Share the address with your partner
+4. Copy the **invite link** or the displayed address (e.g., `192.168.1.5:9876`)
+5. Share the invite link or address with your partner
 
 ### Join a Session
 
-1. Open a workspace with at least an empty folder. IMPORTANT: An empty workspace is not supported at the moment!
+There are two ways to join a session:
+
+**Via Invite Link:**
+1. Click the invite link shared by the host - it opens VS Code and connects automatically
+2. Enter the passphrase if the session is protected
+3. You're connected!
+
+**Manually:**
+1. Open VSCode
 2. Run command: **PairProg: Join Session**
 3. The extension scans your LAN for active sessions - select a discovered session or enter the host's address manually (e.g., `192.168.1.5:9876`)
 4. Enter the passphrase if the session is protected
 5. You're connected - edits sync in real-time. Wohooo!
+
+### Invite Links
+
+When you start hosting, the extension generates an invite link. You can:
+
+- **Copy it from the notification** shown when the session starts
+- **Copy it from the status bar menu** at any time during the session
 
 ## How It Works
 
@@ -53,18 +68,20 @@ Default ignored patterns:
 
 ## Commands
 
-| Command                            | Description                                                      |
-|------------------------------------|------------------------------------------------------------------|
-| `PairProg: Start Hosting Session`  | Start a WebSocket server and accept connections                  |
-| `PairProg: Stop Hosting Session`   | Stop hosting and disconnect                                      |
-| `PairProg: Join Session`           | Connect to a host (via LAN discovery or manual address)          |
-| `PairProg: Leave Session`          | Disconnect from host                                             |
-| `PairProg: Toggle Follow Mode`     | Follow your partner's cursor across files                        |
-| `PairProg: Open Whiteboard`        | Open a collaborative whiteboard for sketching                    |
-| `PairProg: Send Message`           | Send a chat message (`Ctrl+Shift+M` / `Cmd+Shift+M`)             |
-| `PairProg: Share Terminal`         | Stream your terminal output to the client (host only)            |
-| `PairProg: Stop Sharing Terminal`  | Stop streaming terminal output (host only)                       |
-| `PairProg: About`                  | Show the about panel                                             |
+| Command                            | Keybinding                          | Description                                                      |
+|------------------------------------|-------------------------------------|------------------------------------------------------------------|
+| `PairProg: Start Hosting Session`  |                                     | Start a WebSocket server and accept connections                  |
+| `PairProg: Stop Hosting Session`   |                                     | Stop hosting and disconnect                                      |
+| `PairProg: Join Session`           |                                     | Connect to a host (via invite link, LAN discovery, or address)   |
+| `PairProg: Leave Session`          |                                     | Disconnect from host                                             |
+| `PairProg: Toggle Follow Mode`     |                                     | Follow your partner's cursor across files                        |
+| `PairProg: Jump to Partner`        | `Ctrl+Shift+J` / `Cmd+Shift+J`     | Jump to your partner's current cursor location                   |
+| `PairProg: Open Whiteboard`        | `Ctrl+Shift+W` / `Cmd+Shift+W`     | Open a collaborative whiteboard for sketching                    |
+| `PairProg: Send Message`           | `Ctrl+Shift+M` / `Cmd+Shift+M`     | Send a chat message                                              |
+| `PairProg: Share Terminal`         |                                     | Stream your terminal output to the client (host only)            |
+| `PairProg: Stop Sharing Terminal`  |                                     | Stop streaming terminal output (host only)                       |
+| `PairProg: Grant Edit Access`      |                                     | Grant the client permission to edit files (host only)            |
+| `PairProg: About`                  |                                     | Show the about panel                                             |
 
 Click the status bar item for a quick-pick menu with these options.
 

@@ -1,8 +1,7 @@
 import * as ws from "ws";
 import * as https from "https";
 import * as os from "os";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const selfsigned = require("selfsigned");
+import selfsigned from "selfsigned";
 import { EventEmitter } from "events";
 import {
   Message,
@@ -45,12 +44,16 @@ export class PairProgServer extends EventEmitter {
   // Start
 
   async start(port: number): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const pems = selfsigned.generate(
-        [{ name: "commonName", value: "pairprog-lan" }],
-        { days: 1, keySize: 2048, algorithm: "sha256" }
-      );
+    const pems = await selfsigned.generate(
+      [{ name: "commonName", value: "pairprog-lan" }],
+      {
+        keySize: 2048,
+        algorithm: "sha256",
+        notAfterDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }
+    );
 
+    return new Promise((resolve, reject) => {
       this._httpServer = https.createServer({ key: pems.private, cert: pems.cert });
       this.wsServer = new ws.Server({
         noServer: true,

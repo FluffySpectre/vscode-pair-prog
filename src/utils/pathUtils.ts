@@ -21,7 +21,10 @@ export function toRelativePath(uri: vscode.Uri): string | null {
   const rootPath = wsFolder.uri.path;
   const filePath = uri.path;
 
-  if (!filePath.startsWith(rootPath + "/") && filePath !== rootPath) {
+  const normalizedRoot = rootPath.toLowerCase();
+  const normalizedFile = filePath.toLowerCase();
+
+  if (!normalizedFile.startsWith(normalizedRoot + "/") && normalizedFile !== normalizedRoot) {
     return null;
   }
 

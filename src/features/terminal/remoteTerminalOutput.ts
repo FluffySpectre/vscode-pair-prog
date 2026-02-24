@@ -7,7 +7,11 @@ export class RemoteTerminalOutput implements vscode.Disposable {
   private static readonly TERMINAL_CWD_KEY = "pairprog.prevTerminalCwd";
   private static readonly TERMINAL_CWD_UNSET = "pairprog:unset";
 
-  private outputChannel: vscode.OutputChannel | null = null;
+  private terminal: vscode.Terminal | null = null;
+  private closeListener: vscode.Disposable | null = null;
+  private writeEmitter = new vscode.EventEmitter<string>();
+  private ptyReady = false;
+  private pendingData: string[] = [];
   private activeTerminalName: string = "";
   private globalState: vscode.Memento;
 
@@ -35,29 +39,70 @@ export class RemoteTerminalOutput implements vscode.Disposable {
   }
 
   handleOutput(payload: TerminalOutputPayload): void {
-    if (!this.outputChannel || this.activeTerminalName !== payload.terminalName) {
-      this.outputChannel?.dispose();
+    if (!this.terminal || this.activeTerminalName !== payload.terminalName) {
+      this.terminal?.dispose();
+      this.closeListener?.dispose();
+      this.writeEmitter.dispose();
+      this.writeEmitter = new vscode.EventEmitter<string>();
+      this.ptyReady = false;
+      this.pendingData = [];
       this.activeTerminalName = payload.terminalName;
-      this.outputChannel = vscode.window.createOutputChannel(
-        `PairProg Terminal: ${payload.terminalName}`,
-        "ansi"
-      );
-      this.outputChannel.show(/* preserveFocus */ true);
+
+      const pty: vscode.Pseudoterminal = {
+        onDidWrite: this.writeEmitter.event,
+        open: () => {
+          this.ptyReady = true;
+          for (const queued of this.pendingData) {
+            this.writeEmitter.fire(queued);
+          }
+          this.pendingData = [];
+        },
+        close: () => {},
+      };
+
+      this.terminal = vscode.window.createTerminal({
+        name: `PairProg Terminal: ${payload.terminalName}`,
+        pty,
+      });
+      this.terminal.show(true);
+
+      const created = this.terminal;
+      this.closeListener = vscode.window.onDidCloseTerminal((t) => {
+        if (t === created) {
+          this.terminal = null;
+          this.ptyReady = false;
+          this.pendingData = [];
+          this.activeTerminalName = "";
+          this.closeListener?.dispose();
+          this.closeListener = null;
+        }
+      });
     }
-    this.outputChannel.append(payload.data);
+    const data = payload.data.replace(/\r?\n/g, "\r\n");
+    if (this.ptyReady) {
+      this.writeEmitter.fire(data);
+    } else {
+      this.pendingData.push(data);
+    }
   }
 
   handleClear(): void {
-    if (this.outputChannel) {
-      this.outputChannel.appendLine(
-        "\n\u2500\u2500\u2500 Terminal sharing ended \u2500\u2500\u2500"
+    if (this.terminal) {
+      this.writeEmitter.fire(
+        "\r\n\--- Terminal sharing ended ---\r\n"
       );
     }
+    this.activeTerminalName = "";
   }
 
   dispose(): void {
-    this.outputChannel?.dispose();
-    this.outputChannel = null;
+    this.terminal?.dispose();
+    this.terminal = null;
+    this.closeListener?.dispose();
+    this.closeListener = null;
+    this.writeEmitter.dispose();
+    this.ptyReady = false;
+    this.pendingData = [];
     this.activeTerminalName = "";
     this.restoreTerminalCwd();
   }

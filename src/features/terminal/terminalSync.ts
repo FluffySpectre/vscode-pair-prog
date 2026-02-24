@@ -80,6 +80,13 @@ export class TerminalSync implements vscode.Disposable {
         if (event.terminal !== this.sharedTerminal) { return; }
 
         const terminalName = event.terminal.name;
+        const cmd = event.execution.commandLine.value;
+
+        if (cmd) {
+          const header = `❯ ${cmd}\n`;
+          this.sendFn(createMessage(MessageType.TerminalOutput, { data: header, terminalName } as TerminalOutputPayload));
+        }
+
         const stream = event.execution.read();
 
         for await (const data of stream) {

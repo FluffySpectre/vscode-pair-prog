@@ -140,4 +140,8 @@ body {
   font: 16px sans-serif;
   outline: none;
   min-width: 80px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.2;
+  field-sizing: content;
 }

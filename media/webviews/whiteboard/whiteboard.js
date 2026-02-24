@@ -216,7 +216,11 @@ function drawTextEntity(e) {
   ctx.fillStyle = e.color;
   ctx.font = e.fontSize + "px sans-serif";
   ctx.textBaseline = "top";
-  ctx.fillText(e.text, e.x, e.y);
+  const lineHeight = e.fontSize * 1.2;
+  const lines = e.text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], e.x, e.y + i * lineHeight);
+  }
 }
 
 function drawEntity(e) {
@@ -521,8 +525,13 @@ function applyRedo() {
 // --- Measure text for bounding box ---
 function measureText(text, fontSize) {
   ctx.font = fontSize + "px sans-serif";
-  const m = ctx.measureText(text);
-  return { w: m.width, h: fontSize * 1.2 };
+  const lines = text.split("\n");
+  let maxW = 0;
+  for (const line of lines) {
+    const m = ctx.measureText(line);
+    if (m.width > maxW) maxW = m.width;
+  }
+  return { w: maxW, h: fontSize * 1.2 * lines.length };
 }
 
 // --- Inline text input (prompt() is blocked in sandboxed webviews) ---
@@ -563,7 +572,7 @@ function cancelTextInput() {
 }
 
 textInputEl.addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); commitTextInput(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitTextInput(); }
   if (e.key === "Escape") { e.preventDefault(); cancelTextInput(); }
   e.stopPropagation(); // prevent tool shortcuts while typing
 });

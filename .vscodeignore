@@ -1,3 +1,9 @@
 .github/
 src/
 *.vsix
+node_modules/
+esbuild.mjs
+tsconfig.json
+.gitignore
+out/**/*.d.ts
+out/**/*.map

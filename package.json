@@ -5,6 +5,7 @@
   "icon": "icon.png",
   "version": "1.10.2",
   "publisher": "bjoernbosse",
+  "license": "MIT",
   "repository": "https://github.com/FluffySpectre/vscode-pair-prog",
   "engines": {
     "vscode": "^1.109.0"
@@ -120,8 +121,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc -p ./ --noEmit",
     "lint": "eslint src --ext ts"
   },
   "dependencies": {
@@ -138,6 +140,7 @@
     "@types/sharedb": "^5.1.0",
     "@types/vscode": "^1.109.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.27.3",
     "typescript": "^5.9.3"
   }
 }

@@ -355,79 +355,81 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   // Render Decorations
 
   private applyRemoteDecorations(): void {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || !this.remoteCursors) {
+    if (!this.remoteCursors) {
       return;
     }
 
-    // Check if this editor shows the same file as the remote cursor
-    const currentFilePath = toRelativePath(editor.document.uri);
-    if (currentFilePath !== this.remoteCursors.filePath) {
-      // Remote cursor is in a different file - clear decorations
-      editor.setDecorations(this.cursorDecorationType, []);
-      editor.setDecorations(this.lineHighlightDecorationType, []);
-      editor.setDecorations(this.selectionDecorationType, []);
-      editor.setDecorations(this.usernameLabelDecorationType, []);
-      return;
-    }
-
-    const cursorDecorations: vscode.DecorationOptions[] = [];
-    const lineHighlightDecorations: vscode.DecorationOptions[] = [];
-    const selectionDecorations: vscode.DecorationOptions[] = [];
-    const usernameLabelDecorations: vscode.DecorationOptions[] = [];
-
-    for (const cursor of this.remoteCursors.cursors) {
-      // Skip invalid cursor positions
-      if (cursor.position.line >= editor.document.lineCount) {
+    // Apply to all visible editors so decorations update even when a
+    // non-editor panel (e.g. the whiteboard) has focus
+    for (const editor of vscode.window.visibleTextEditors) {
+      const filePath = toRelativePath(editor.document.uri);
+      if (filePath !== this.remoteCursors.filePath) {
+        // Remote cursor is in a different file - clear decorations
+        editor.setDecorations(this.cursorDecorationType, []);
+        editor.setDecorations(this.lineHighlightDecorationType, []);
+        editor.setDecorations(this.selectionDecorationType, []);
+        editor.setDecorations(this.usernameLabelDecorationType, []);
         continue;
       }
 
-      // Cursor position decoration
-      const pos = new vscode.Position(
-        cursor.position.line,
-        cursor.position.character
-      );
+      const cursorDecorations: vscode.DecorationOptions[] = [];
+      const lineHighlightDecorations: vscode.DecorationOptions[] = [];
+      const selectionDecorations: vscode.DecorationOptions[] = [];
+      const usernameLabelDecorations: vscode.DecorationOptions[] = [];
 
-      cursorDecorations.push({
-        range: new vscode.Range(pos, pos),
-      });
+      for (const cursor of this.remoteCursors.cursors) {
+        // Skip invalid cursor positions
+        if (cursor.position.line >= editor.document.lineCount) {
+          continue;
+        }
 
-      // Highlight the entire line the remote cursor is on
-      const lineRange = editor.document.lineAt(cursor.position.line).range;
-      lineHighlightDecorations.push({
-        range: lineRange,
-      });
-
-      // Username label pinned to the right edge of the line
-      usernameLabelDecorations.push({
-        range: lineRange,
-        renderOptions: {
-          after: {
-            contentText: this.remoteCursors.username,
-          },
-        },
-      });
-
-      // Selection decoration
-      if (cursor.selection) {
-        const start = new vscode.Position(
-          cursor.selection.start.line,
-          cursor.selection.start.character
+        // Cursor position decoration
+        const pos = new vscode.Position(
+          cursor.position.line,
+          cursor.position.character
         );
-        const end = new vscode.Position(
-          cursor.selection.end.line,
-          cursor.selection.end.character
-        );
-        selectionDecorations.push({
-          range: new vscode.Range(start, end),
+
+        cursorDecorations.push({
+          range: new vscode.Range(pos, pos),
         });
-      }
-    }
 
-    editor.setDecorations(this.cursorDecorationType, cursorDecorations);
-    editor.setDecorations(this.lineHighlightDecorationType, lineHighlightDecorations);
-    editor.setDecorations(this.selectionDecorationType, selectionDecorations);
-    editor.setDecorations(this.usernameLabelDecorationType, usernameLabelDecorations);
+        // Highlight the entire line the remote cursor is on
+        const lineRange = editor.document.lineAt(cursor.position.line).range;
+        lineHighlightDecorations.push({
+          range: lineRange,
+        });
+
+        // Username label pinned to the right edge of the line
+        usernameLabelDecorations.push({
+          range: lineRange,
+          renderOptions: {
+            after: {
+              contentText: this.remoteCursors.username,
+            },
+          },
+        });
+
+        // Selection decoration
+        if (cursor.selection) {
+          const start = new vscode.Position(
+            cursor.selection.start.line,
+            cursor.selection.start.character
+          );
+          const end = new vscode.Position(
+            cursor.selection.end.line,
+            cursor.selection.end.character
+          );
+          selectionDecorations.push({
+            range: new vscode.Range(start, end),
+          });
+        }
+      }
+
+      editor.setDecorations(this.cursorDecorationType, cursorDecorations);
+      editor.setDecorations(this.lineHighlightDecorationType, lineHighlightDecorations);
+      editor.setDecorations(this.selectionDecorationType, selectionDecorations);
+      editor.setDecorations(this.usernameLabelDecorationType, usernameLabelDecorations);
+    }
   }
 
   // Clear

@@ -7,6 +7,7 @@
   "publisher": "bjoernbosse",
   "license": "MIT",
   "repository": "https://github.com/FluffySpectre/vscode-pair-prog",
+  "keywords": ["pair-programming", "collaboration", "realtime", "live-share"],
   "engines": {
     "vscode": "^1.109.0"
   },

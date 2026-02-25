@@ -2,6 +2,8 @@
 
 Real-time peer-to-peer pair programming on a shared workspace.
 
+![Screenshot](media/screenshots/screenshot1.jpg)
+
 ## Features
 
 - **Real-Time Collaborative Editing** - Conflict-free simultaneous editing via Operational Transform, including file create/delete/rename sync

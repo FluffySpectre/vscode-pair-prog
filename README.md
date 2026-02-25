@@ -2,6 +2,20 @@
 
 Real-time peer-to-peer pair programming on a shared workspace.
 
+## Features
+
+- **Real-Time Collaborative Editing** - Conflict-free simultaneous editing via Operational Transform, including file create/delete/rename sync
+- **Cursor & Selection Sync** - See your partner's cursor, selections, and active line
+- **Follow Mode** - Automatically follow your partner's cursor across files
+- **Jump to Partner** - Instantly jump to your partner's current location
+- **Chat** - Quick messaging with copy, reply, and open-link actions
+- **Collaborative Whiteboard** - Shared canvas with pen, shapes, arrows, text, undo/redo, zoom/pan, and save as PNG
+- **Terminal Sharing** - Host streams terminal output to the client as a read-only remote terminal
+- **Edit Access Control** - Client connects read-only by default; host can grant edit access
+- **Session Discovery** - Auto-discovers sessions on LAN, plus manual address entry and invite links
+- **Passphrase Protection** - Optionally protect sessions with a passphrase
+- **Virtual Filesystem** - Client views files in-memory with no local disk writes
+
 ## Quick Start
 
 ### Host a Session

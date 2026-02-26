@@ -12,8 +12,6 @@ import { SessionManager } from "./session/sessionManager";
 import { registerCommands } from "./commands";
 import { registerUriHandler } from "./uriHandler";
 
-const VFS_SCHEME = "pairprog";
-
 let sessionManager: SessionManager;
 let featureRegistry: FeatureRegistry;
 let statusBar: StatusBar;
@@ -23,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const vfsProvider = new PairProgFileSystemProvider();
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider(VFS_SCHEME, vfsProvider, { isCaseSensitive: true })
+    vscode.workspace.registerFileSystemProvider(PairProgFileSystemProvider.SCHEME, vfsProvider, { isCaseSensitive: true })
   );
 
   statusBar = new StatusBar();

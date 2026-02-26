@@ -73,16 +73,16 @@ async function showStatusBarMenu(
   const items: vscode.QuickPickItem[] = [];
 
   if (sessionManager.isHosting) {
+    if (!sessionManager.hasGrantedEditAccess) {
+      items.push({ label: "$(lock) Grant Edit Access", description: "Allow partner to edit files" });
+    } /*else {
+      items.push({ label: "$(check) Edit Access Granted", description: "Partner can edit files" });
+    }*/
+
     items.push(
       { label: "$(eye) Toggle Follow Mode", description: "" },
       { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
     );
-
-    if (!sessionManager.hasGrantedEditAccess) {
-      items.push({ label: "$(lock) Grant Edit Access", description: "Allow partner to edit files" });
-    } else {
-      items.push({ label: "$(check) Edit Access Granted", description: "Partner can edit files" });
-    }
 
     for (const cmd of featureRegistry.getCommands("host" as SessionRole)) {
       items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });

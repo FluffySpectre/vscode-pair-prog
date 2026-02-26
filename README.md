@@ -2,7 +2,7 @@
 
 Real-time peer-to-peer pair programming on a shared workspace.
 
-![Screenshot](media/screenshots/screenshot1.jpg)
+![Screenshot](media/screenshots/screenshot1.png)
 
 ## Features
 

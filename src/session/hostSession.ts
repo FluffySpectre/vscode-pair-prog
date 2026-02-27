@@ -18,6 +18,7 @@ import { DocumentSync } from "../sync/documentSync";
 import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
+import { DiagnosticsSync } from "../sync/diagnosticsSync";
 import { StatusBar } from "../ui/statusBar";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
@@ -38,6 +39,7 @@ export class HostSession implements vscode.Disposable {
   private documentSync: DocumentSync | null = null;
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
+  private diagnosticsSync: DiagnosticsSync | null = null;
   private statusBar: StatusBar;
   private featureRegistry: FeatureRegistry;
   private messageRouter: MessageRouter;
@@ -233,6 +235,7 @@ export class HostSession implements vscode.Disposable {
     }
 
     this.cursorSync!.sendCurrentCursor();
+    this.diagnosticsSync!.sendFullSnapshot();
 
     // Re-grant edit access on reconnect if it was previously granted
     if (this._editAccessGranted) {
@@ -296,9 +299,13 @@ export class HostSession implements vscode.Disposable {
     this.fileOpsSync = new FileOpsSync(sendFn, true, wsFolder.uri.fsPath, ignored);
     this.fileOpsSync.activate();
 
+    this.diagnosticsSync = new DiagnosticsSync(sendFn, true);
+    this.diagnosticsSync.activate();
+
     this.messageRouter.register(this.cursorSync);
     this.messageRouter.register(this.documentSync);
     this.messageRouter.register(this.fileOpsSync);
+    this.messageRouter.register(this.diagnosticsSync);
 
     await this.featureRegistry.activateAll({
       sendFn,
@@ -313,6 +320,7 @@ export class HostSession implements vscode.Disposable {
     if (this.cursorSync) { this.messageRouter.unregister(this.cursorSync); }
     if (this.documentSync) { this.messageRouter.unregister(this.documentSync); }
     if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
+    if (this.diagnosticsSync) { this.messageRouter.unregister(this.diagnosticsSync); }
 
     this.documentSync?.dispose();
     this.documentSync = null;
@@ -325,6 +333,9 @@ export class HostSession implements vscode.Disposable {
 
     this.fileOpsSync?.dispose();
     this.fileOpsSync = null;
+
+    this.diagnosticsSync?.dispose();
+    this.diagnosticsSync = null;
 
     this.featureRegistry.deactivateAll();
   }

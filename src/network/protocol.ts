@@ -36,6 +36,9 @@ export enum MessageType {
   TerminalOutput = "terminalOutput",
   TerminalClear = "terminalClear",
 
+  // Diagnostics
+  DiagnosticsUpdate = "diagnosticsUpdate",
+
   // Virtual workspace
   DirectoryTree = "directoryTree",
   FileContentRequest = "fileContentRequest",
@@ -206,6 +209,31 @@ export interface TerminalOutputPayload {
 }
 
 export interface TerminalClearPayload {}
+
+// Diagnostics payload types
+
+export interface SerializedRange {
+  startLine: number;
+  startCharacter: number;
+  endLine: number;
+  endCharacter: number;
+}
+
+export interface SerializedDiagnostic {
+  range: SerializedRange;
+  message: string;
+  severity: number; // 0=Error, 1=Warning, 2=Info, 3=Hint
+  source?: string;
+  code?: string | number;
+  tags?: number[]; // 1=Unnecessary, 2=Deprecated
+}
+
+export interface DiagnosticsUpdatePayload {
+  files: Array<{
+    filePath: string;
+    diagnostics: SerializedDiagnostic[];
+  }>;
+}
 
 export interface EditPermissionGrantedPayload {}
 

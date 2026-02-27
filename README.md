@@ -2,7 +2,7 @@
 
 Real-time peer-to-peer pair programming on a shared workspace.
 
-![Screenshot](media/screenshots/screenshot1.png)
+![Screenshot](https://raw.githubusercontent.com/FluffySpectre/vscode-pair-prog/main/media/screenshots/screenshot1.png)
 
 ## Features
 

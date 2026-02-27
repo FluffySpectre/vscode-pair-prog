@@ -37,6 +37,7 @@ export class IntellisenseSync implements vscode.Disposable, MessageHandler {
   private isHost: boolean;
   private pendingRequests = new Map<string, PendingRequest>();
   private requestCounter = 0;
+  private isProbing = false;
 
   constructor(sendFn: (msg: Message) => void, isHost: boolean) {
     this.sendFn = sendFn;
@@ -78,8 +79,10 @@ export class IntellisenseSync implements vscode.Disposable, MessageHandler {
       vscode.languages.registerCompletionItemProvider(
         selector,
         {
-          provideCompletionItems: (doc, pos, token, ctx) =>
-            this.proxyCompletion(doc.uri, pos, token, ctx.triggerCharacter),
+          provideCompletionItems: (doc, pos, token, ctx) => {
+            if (this.isProbing) { return null; }
+            return this.proxyCompletion(doc.uri, pos, token, ctx.triggerCharacter);
+          },
         },
         ".", ":", "<", '"', "'", "/", "@", "#",
       ),
@@ -113,14 +116,51 @@ export class IntellisenseSync implements vscode.Disposable, MessageHandler {
 
   // Client: proxy methods
 
-  private proxyCompletion(
+  private async proxyCompletion(
     uri: vscode.Uri,
     position: vscode.Position,
     token: vscode.CancellationToken,
     triggerCharacter?: string,
   ): Promise<vscode.CompletionList | null> {
-    return this.sendRequest("completion", uri, position, token, triggerCharacter)
+    const localPromise = this.probeLocalCompletions(uri, position, triggerCharacter);
+    const hostPromise = this.sendRequest("completion", uri, position, token, triggerCharacter)
       .then((r) => r ? this.deserializeCompletionList(r.result as IntellisenseResult & { kind: "completion" }) : null);
+
+    const [localList, hostList] = await Promise.all([localPromise, hostPromise]);
+    if (!hostList) { return null; }
+
+    const localKeys = new Set<string>();
+    if (localList) {
+      for (const item of localList.items) {
+        localKeys.add(completionKey(item));
+      }
+    }
+
+    // Keep only host items that local providers don't already provide
+    const uniqueItems = hostList.items.filter((item) => !localKeys.has(completionKey(item)));
+    if (uniqueItems.length === 0) { return null; }
+    return new vscode.CompletionList(uniqueItems, hostList.isIncomplete);
+  }
+
+  private async probeLocalCompletions(
+    uri: vscode.Uri,
+    position: vscode.Position,
+    triggerCharacter?: string,
+  ): Promise<vscode.CompletionList | null> {
+    this.isProbing = true;
+    try {
+      const list = await vscode.commands.executeCommand<vscode.CompletionList>(
+        "vscode.executeCompletionItemProvider",
+        uri,
+        position,
+        triggerCharacter,
+      );
+      return list ?? null;
+    } catch {
+      return null;
+    } finally {
+      this.isProbing = false;
+    }
   }
 
   private proxyHover(
@@ -543,4 +583,9 @@ function serializeMarkdown(
 function deserializeMarkdown(c: SerializedMarkdownContent): vscode.MarkdownString | string {
   if (typeof c === "string") { return c; }
   return new vscode.MarkdownString(c.value);
+}
+
+function completionKey(item: vscode.CompletionItem): string {
+  const label = typeof item.label === "string" ? item.label : item.label.label;
+  return `${label}|${item.kind ?? ""}`;
 }

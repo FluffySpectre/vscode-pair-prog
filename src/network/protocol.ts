@@ -40,6 +40,10 @@ export enum MessageType {
   DiagnosticsRequest = "diagnosticsRequest",
   DiagnosticsUpdate = "diagnosticsUpdate",
 
+  // IntelliSense proxy
+  IntellisenseRequest = "intellisenseRequest",
+  IntellisenseResponse = "intellisenseResponse",
+
   // Virtual workspace
   DirectoryTree = "directoryTree",
   FileContentRequest = "fileContentRequest",
@@ -234,6 +238,94 @@ export interface DiagnosticsUpdatePayload {
     filePath: string;
     diagnostics: SerializedDiagnostic[];
   }>;
+}
+
+// IntelliSense proxy payload types
+
+export type IntellisenseKind = "completion" | "hover" | "definition" | "signatureHelp";
+
+export interface SerializedPosition {
+  line: number;
+  character: number;
+}
+
+export type SerializedMarkdownContent =
+  | string
+  | { kind: "markdown"; value: string };
+
+export interface SerializedSnippetString {
+  snippet: string;
+}
+
+export interface SerializedCompletionItem {
+  label: string | { label: string; detail?: string; description?: string };
+  kind?: number;
+  detail?: string;
+  documentation?: SerializedMarkdownContent;
+  sortText?: string;
+  filterText?: string;
+  preselect?: boolean;
+  insertText?: string | SerializedSnippetString;
+  range?: SerializedRange | {
+    inserting: SerializedRange;
+    replacing: SerializedRange;
+  };
+  commitCharacters?: string[];
+  additionalTextEdits?: Array<{
+    range: SerializedRange;
+    newText: string;
+  }>;
+}
+
+export interface SerializedCompletionList {
+  isIncomplete: boolean;
+  items: SerializedCompletionItem[];
+}
+
+export interface SerializedHover {
+  contents: SerializedMarkdownContent[];
+  range?: SerializedRange;
+}
+
+export interface SerializedLocation {
+  filePath: string;
+  range: SerializedRange;
+}
+
+export interface SerializedParameterInfo {
+  label: string | [number, number];
+  documentation?: SerializedMarkdownContent;
+}
+
+export interface SerializedSignatureInfo {
+  label: string;
+  documentation?: SerializedMarkdownContent;
+  parameters: SerializedParameterInfo[];
+}
+
+export interface SerializedSignatureHelp {
+  signatures: SerializedSignatureInfo[];
+  activeSignature: number;
+  activeParameter: number;
+}
+
+export type IntellisenseResult =
+  | { kind: "completion"; data: SerializedCompletionList | null }
+  | { kind: "hover"; data: SerializedHover | null }
+  | { kind: "definition"; data: SerializedLocation[] | null }
+  | { kind: "signatureHelp"; data: SerializedSignatureHelp | null };
+
+export interface IntellisenseRequestPayload {
+  requestId: string;
+  kind: IntellisenseKind;
+  filePath: string;
+  position: SerializedPosition;
+  triggerCharacter?: string;
+}
+
+export interface IntellisenseResponsePayload {
+  requestId: string;
+  result: IntellisenseResult;
 }
 
 export interface EditPermissionGrantedPayload {}

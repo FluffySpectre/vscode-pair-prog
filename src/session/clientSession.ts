@@ -17,6 +17,7 @@ import { ShareDBBridge } from "../sync/sharedbBridge";
 import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { DiagnosticsSync } from "../sync/diagnosticsSync";
+import { IntellisenseSync } from "../sync/intellisenseSync";
 import { StatusBar } from "../ui/statusBar";
 import { getSystemUsername, toAbsoluteUri } from "../utils/pathUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
@@ -44,6 +45,7 @@ export class ClientSession implements vscode.Disposable {
   private cursorSync: CursorSync | null = null;
   private fileOpsSync: FileOpsSync | null = null;
   private diagnosticsSync: DiagnosticsSync | null = null;
+  private intellisenseSync: IntellisenseSync | null = null;
   private statusBar: StatusBar;
   private featureRegistry: FeatureRegistry;
   private messageRouter: MessageRouter;
@@ -281,10 +283,14 @@ export class ClientSession implements vscode.Disposable {
     this.diagnosticsSync = new DiagnosticsSync(sendFn, false);
     this.diagnosticsSync.activate();
 
+    this.intellisenseSync = new IntellisenseSync(sendFn, false);
+    this.intellisenseSync.activate();
+
     this.messageRouter.register(this.cursorSync);
     this.messageRouter.register(this.documentSync);
     this.messageRouter.register(this.fileOpsSync);
     this.messageRouter.register(this.diagnosticsSync);
+    this.messageRouter.register(this.intellisenseSync);
 
     await this.featureRegistry.activateAll({
       sendFn,
@@ -302,6 +308,7 @@ export class ClientSession implements vscode.Disposable {
     if (this.documentSync) { this.messageRouter.unregister(this.documentSync); }
     if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
     if (this.diagnosticsSync) { this.messageRouter.unregister(this.diagnosticsSync); }
+    if (this.intellisenseSync) { this.messageRouter.unregister(this.intellisenseSync); }
 
     this.documentSync?.dispose();
     this.documentSync = null;
@@ -326,6 +333,9 @@ export class ClientSession implements vscode.Disposable {
 
     this.diagnosticsSync?.dispose();
     this.diagnosticsSync = null;
+
+    this.intellisenseSync?.dispose();
+    this.intellisenseSync = null;
 
     this.featureRegistry.deactivateAll();
   }

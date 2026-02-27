@@ -3,7 +3,7 @@
   "displayName": "VSCode Pair Prog",
   "description": "Real-time peer-to-peer pair programming on a shared workspace.",
   "icon": "icon.png",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "publisher": "bjoernbosse",
   "license": "MIT",
   "repository": "https://github.com/FluffySpectre/vscode-pair-prog",
@@ -116,6 +116,11 @@
             "**/vendor/**"
           ],
           "description": "Glob patterns for files/folders excluded from sync."
+        },
+        "pairprog.relayServer": {
+          "type": "string",
+          "default": "",
+          "description": "URL of a relay server for session discovery and connection (e.g., http://relay.example.com:3000). Leave empty to disable."
         }
       }
     }

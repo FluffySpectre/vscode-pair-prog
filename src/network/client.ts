@@ -30,6 +30,7 @@ export class PairProgClient extends EventEmitter {
   private address: string = "";
   private helloPayload: HelloPayload | null = null;
   private intentionalDisconnect = false;
+  private relayUrl: string | undefined;
 
   get isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === ws.OPEN;
@@ -37,24 +38,29 @@ export class PairProgClient extends EventEmitter {
 
   // Connect
 
-  async connect(address: string, hello: HelloPayload): Promise<void> {
+  async connect(address: string, hello: HelloPayload, options?: { relayUrl?: string }): Promise<void> {
     this.address = address;
     this.helloPayload = hello;
     this.intentionalDisconnect = false;
+    this.relayUrl = options?.relayUrl;
 
     return this.doConnect();
   }
 
   private doConnect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = `wss://${this.address}`;
-      this.socket = new ws.WebSocket(url, {
+      const url = this.relayUrl || `wss://${this.address}`;
+      const wsOptions: ws.ClientOptions = {
         perMessageDeflate: {
           zlibDeflateOptions: { level: 6 },
           threshold: 256,
         },
-        rejectUnauthorized: false, // Accept the host's self-signed TLS certificate
-      });
+      };
+      // Only skip TLS verification for direct connections (self-signed certs)
+      if (!this.relayUrl) {
+        wsOptions.rejectUnauthorized = false;
+      }
+      this.socket = new ws.WebSocket(url, wsOptions);
 
       const onOpen = () => {
         this.reconnectAttempts = 0;

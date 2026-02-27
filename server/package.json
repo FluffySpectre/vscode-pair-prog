@@ -1,0 +1,19 @@
+{
+  "name": "pairprog-relay-server",
+  "version": "1.0.0",
+  "description": "Relay server for vscode-pair-prog session discovery and connection",
+  "main": "out/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node out/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "@types/node": "^24.1.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -217,6 +217,38 @@ export class PairProgServer extends EventEmitter {
     }
   }
 
+  // Relay support
+
+  adoptRelaySocket(socket: ws.WebSocket): void {
+    const onFirstMessage = (data: ws.RawData) => {
+      socket.removeListener("message", onFirstMessage);
+      socket.removeListener("close", onClose);
+
+      if (this.client && this.client.readyState === ws.OPEN) {
+        socket.send(
+          serialize(
+            createMessage(MessageType.Error, {
+              message: "Session already has a connected client.",
+              code: "SESSION_FULL",
+            })
+          )
+        );
+        socket.close();
+        return;
+      }
+
+      this.handleNewConnection(socket);
+      socket.emit("message", data);
+    };
+
+    const onClose = () => {
+      socket.removeListener("message", onFirstMessage);
+    };
+
+    socket.on("message", onFirstMessage);
+    socket.on("close", onClose);
+  }
+
   // Utility
 
   private getLanIp(): string {

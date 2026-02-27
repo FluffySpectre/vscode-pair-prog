@@ -6,6 +6,7 @@ import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
 import { BeaconListener, DiscoveredSession } from "../network/beacon";
+import { RelayConnector, RelaySessionInfo } from "../network/relayConnector";
 
 const VFS_SCHEME = "pairprog";
 
@@ -99,19 +100,24 @@ export class SessionManager {
       return;
     }
 
+    const config = vscode.workspace.getConfiguration("pairprog");
+    const relayUrl = config.get<string>("relayServer");
+
     let address: string | undefined;
     let requiresPassphrase = false;
+    let relayInfo: { relayUrl: string; code: string } | undefined;
 
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: "Searching for pair programming sessions on your local network...",
+        title: "Searching for pair programming sessions...",
         cancellable: true,
       },
       async (_, token) => {
+        // Discover LAN sessions and relay sessions in parallel
         const listener = new BeaconListener();
 
-        const found: DiscoveredSession[] = await Promise.race([
+        const lanPromise: Promise<DiscoveredSession[]> = Promise.race([
           new Promise<DiscoveredSession[]>((resolve) => {
             listener.on("done", resolve);
             listener.on("error", () => resolve([]));
@@ -129,37 +135,99 @@ export class SessionManager {
           }),
         ]);
 
+        let relayPromise: Promise<RelaySessionInfo[]>;
+        if (relayUrl) {
+          const connector = new RelayConnector(relayUrl);
+          relayPromise = connector.listSessions().catch(() => []);
+        } else {
+          relayPromise = Promise.resolve([]);
+        }
+
+        const [lanSessions, relaySessions] = await Promise.all([lanPromise, relayPromise]);
+
         if (token.isCancellationRequested) { return; }
 
-        type SessionItem = vscode.QuickPickItem & { sessionAddress?: string; requiresPassphrase?: boolean };
+        type SessionItem = vscode.QuickPickItem & {
+          sessionAddress?: string;
+          requiresPassphrase?: boolean;
+          relayCode?: string;
+          action?: "manual" | "code";
+        };
 
-        const items: SessionItem[] = found.map((s) => ({
-          label: s.requiresPassphrase ? `$(lock) ${s.name}` : `$(broadcast) ${s.name}`,
-          description: s.workspaceFolder,
-          detail: s.address,
-          sessionAddress: s.address,
-          requiresPassphrase: s.requiresPassphrase,
-        }));
+        const items: SessionItem[] = [];
+
+        // Relay sessions first
+        for (const s of relaySessions) {
+          items.push({
+            label: s.requiresPassphrase ? `$(lock) $(cloud) ${s.name}` : `$(cloud) ${s.name}`,
+            description: `${s.workspace} (relay)`,
+            detail: `Session code: ${s.code}`,
+            relayCode: s.code,
+            requiresPassphrase: s.requiresPassphrase,
+          });
+        }
+
+        // LAN sessions
+        for (const s of lanSessions) {
+          items.push({
+            label: s.requiresPassphrase ? `$(lock) ${s.name}` : `$(broadcast) ${s.name}`,
+            description: s.workspaceFolder,
+            detail: s.address,
+            sessionAddress: s.address,
+            requiresPassphrase: s.requiresPassphrase,
+          });
+        }
+
+        // Manual options
+        if (relayUrl) {
+          items.push({
+            label: "$(key) Enter session code",
+            description: "Join a relay session by code",
+            action: "code",
+          });
+        }
 
         items.push({
           label: "$(edit) Enter address manually",
           description: "Type the host's IP:PORT",
-          sessionAddress: undefined,
+          action: "manual",
         });
 
+        const totalFound = lanSessions.length + relaySessions.length;
+
         const picked = await vscode.window.showQuickPick(items, {
-          placeHolder: found.length > 0
-            ? `Found ${found.length} session(s) - select one or enter manually`
-            : "No sessions found - enter address manually",
+          placeHolder: totalFound > 0
+            ? `Found ${totalFound} session(s) - select one or enter manually`
+            : "No sessions found - enter address or code manually",
           title: "Join Pair Programming Session",
         });
 
         if (!picked) { return; }
 
-        if (picked.sessionAddress) {
+        if (picked.relayCode) {
+          // Relay session selected
+          relayInfo = { relayUrl: this.buildRelayMainUrl(relayUrl!, picked.relayCode), code: picked.relayCode };
+          requiresPassphrase = picked.requiresPassphrase || false;
+          address = "relay"; // Placeholder; connection goes through relay
+        } else if (picked.action === "code") {
+          const code = await vscode.window.showInputBox({
+            prompt: "Enter session code",
+            placeHolder: "e.g., K7XM3R",
+            validateInput: (value) => {
+              if (!value || value.trim().length === 0) { return "Session code is required."; }
+              return null;
+            },
+          });
+          if (!code) { return; }
+          const trimmed = code.trim().toUpperCase();
+          relayInfo = { relayUrl: this.buildRelayMainUrl(relayUrl!, trimmed), code: trimmed };
+          address = "relay";
+          // We don't know if it needs passphrase, so we'll ask anyway below
+          requiresPassphrase = true;
+        } else if (picked.sessionAddress) {
           address = picked.sessionAddress;
           requiresPassphrase = picked.requiresPassphrase || false;
-        } else {
+        } else if (picked.action === "manual") {
           address = await vscode.window.showInputBox({
             prompt: "Enter the host's address",
             placeHolder: "192.168.1.5:9876",
@@ -188,15 +256,20 @@ export class SessionManager {
       if (passphrase === undefined) { return; }
     }
 
-    await this.connectToSession(address, passphrase);
+    await this.connectToSession(address, passphrase, relayInfo);
   }
 
-  async connectToSession(address: string, passphrase?: string): Promise<void> {
+  private buildRelayMainUrl(relayUrl: string, code: string): string {
+    const base = relayUrl.replace(/\/+$/, "").replace(/^http/, "ws");
+    return `${base}/relay/${code}/main?role=client`;
+  }
+
+  async connectToSession(address: string, passphrase?: string, relay?: { relayUrl: string; code: string }): Promise<void> {
     try {
       this.clientSession = new ClientSession(
         this.statusBar, this.context, this.vfsProvider, this.featureRegistry, this.messageRouter
       );
-      await this.clientSession.connect(address, passphrase);
+      await this.clientSession.connect(address, passphrase, relay);
     } catch (err: any) {
       vscode.window.showErrorMessage(`Failed to connect: ${err.message}`);
       this.clientSession?.dispose();
@@ -242,23 +315,26 @@ export class SessionManager {
   }
 
   async checkPendingReconnect(): Promise<void> {
-    const pending = this.context.globalState.get<{ address: string }>("pairprog.pendingReconnect");
+    const pending = this.context.globalState.get<{
+      address: string;
+      relay?: { relayUrl: string; code: string };
+    }>("pairprog.pendingReconnect");
     if (pending) {
       this.context.globalState.update("pairprog.pendingReconnect", undefined);
-      await this.autoReconnect(pending.address);
+      await this.autoReconnect(pending.address, pending.relay);
     } else {
       this.cleanupStaleVfs();
     }
   }
 
-  private async autoReconnect(address: string): Promise<void> {
+  private async autoReconnect(address: string, relay?: { relayUrl: string; code: string }): Promise<void> {
     try {
       const passphrase = await this.context.secrets.get("pairprog.reconnectPassphrase");
       await this.context.secrets.delete("pairprog.reconnectPassphrase");
       this.clientSession = new ClientSession(
         this.statusBar, this.context, this.vfsProvider, this.featureRegistry, this.messageRouter
       );
-      await this.clientSession.connect(address, passphrase);
+      await this.clientSession.connect(address, passphrase, relay);
     } catch (err: any) {
       console.warn("[PairProg] Auto-reconnect failed:", err.message);
       this.clientSession?.dispose();

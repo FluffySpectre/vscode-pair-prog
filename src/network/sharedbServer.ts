@@ -45,6 +45,11 @@ export class ShareDBServer {
     return this.hostConnection;
   }
 
+  adoptRelaySocket(socket: ws.WebSocket): void {
+    const stream = new WebSocketJSONStream(socket);
+    this.backend.listen(stream);
+  }
+
   stop(): void {
     this.wss.close();
     this.backend.close();

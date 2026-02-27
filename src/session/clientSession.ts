@@ -205,6 +205,8 @@ export class ClientSession implements vscode.Disposable {
 
     // Open the files that the host currently has open
     await this.openHostFiles();
+
+    this.diagnosticsSync!.requestFullSync();
   }
 
   private async openHostFiles(): Promise<void> {

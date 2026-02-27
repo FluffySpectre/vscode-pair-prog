@@ -37,6 +37,7 @@ export enum MessageType {
   TerminalClear = "terminalClear",
 
   // Diagnostics
+  DiagnosticsRequest = "diagnosticsRequest",
   DiagnosticsUpdate = "diagnosticsUpdate",
 
   // Virtual workspace

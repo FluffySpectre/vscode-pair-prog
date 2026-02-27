@@ -235,7 +235,6 @@ export class HostSession implements vscode.Disposable {
     }
 
     this.cursorSync!.sendCurrentCursor();
-    this.diagnosticsSync!.sendFullSnapshot();
 
     // Re-grant edit access on reconnect if it was previously granted
     if (this._editAccessGranted) {

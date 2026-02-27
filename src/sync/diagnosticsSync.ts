@@ -30,7 +30,9 @@ export class DiagnosticsSync implements vscode.Disposable, MessageHandler {
   constructor(sendFn: (msg: Message) => void, isHost: boolean) {
     this.sendFn = sendFn;
     this.isHost = isHost;
-    this.messageTypes = isHost ? [] : [MessageType.DiagnosticsUpdate as string];
+    this.messageTypes = isHost
+      ? [MessageType.DiagnosticsRequest as string]
+      : [MessageType.DiagnosticsUpdate as string];
   }
 
   // Activation
@@ -47,12 +49,22 @@ export class DiagnosticsSync implements vscode.Disposable, MessageHandler {
     }
   }
 
-  // MessageHandler (client-side only)
+  // MessageHandler
 
   handleMessage(msg: Message): void {
-    if (msg.type === MessageType.DiagnosticsUpdate) {
+    if (msg.type === MessageType.DiagnosticsRequest) {
+      // Host: client is ready, send full snapshot
+      this.sendFullSnapshot();
+    } else if (msg.type === MessageType.DiagnosticsUpdate) {
+      // Client: apply received diagnostics
       this.applyDiagnostics(msg.payload as DiagnosticsUpdatePayload);
     }
+  }
+
+  // Client: request full diagnostics from host
+
+  requestFullSync(): void {
+    this.sendFn(createMessage(MessageType.DiagnosticsRequest, {}));
   }
 
   // Host: send full snapshot of all current diagnostics

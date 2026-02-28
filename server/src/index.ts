@@ -7,6 +7,7 @@ import { SessionRegistry } from "./sessionRegistry";
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const TLS_CERT_PATH = process.env.TLS_CERT_PATH;
 const TLS_KEY_PATH = process.env.TLS_KEY_PATH;
+const DISCOVERY_ENABLED = process.env.DISCOVERY_ENABLED?.toLowerCase() !== "false";
 const registry = new SessionRegistry();
 
 const requestHandler: http.RequestListener = (req, res) => {
@@ -48,6 +49,11 @@ const requestHandler: http.RequestListener = (req, res) => {
 
   // GET /api/sessions - List active sessions
   if (req.method === "GET" && url.pathname === "/api/sessions") {
+    if (!DISCOVERY_ENABLED) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Session discovery is disabled" }));
+      return;
+    }
     const sessions = registry.listSessions();
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ sessions }));
@@ -140,7 +146,7 @@ wss.on("connection", (socket: WebSocket, req) => {
 registry.start();
 const protocol = TLS_CERT_PATH && TLS_KEY_PATH ? "HTTPS" : "HTTP";
 httpServer.listen(PORT, () => {
-  console.log(`[Relay] Server listening on port ${PORT} (${protocol})`);
+  console.log(`[Relay] Server listening on port ${PORT} (${protocol}), discovery ${DISCOVERY_ENABLED ? "enabled" : "disabled"}`);
 });
 
 // Graceful shutdown

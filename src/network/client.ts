@@ -10,6 +10,7 @@ import {
   HelloPayload,
   PROTOCOL_VERSION,
 } from "./protocol";
+import { WS_DEFLATE_OPTIONS } from "./wsDefaults";
 
 export interface ClientEvents {
   connected: (welcome: WelcomePayload) => void;
@@ -27,10 +28,10 @@ export class PairProgClient extends EventEmitter {
   private readonly MAX_RECONNECT_ATTEMPTS = 15;
   private readonly RECONNECT_INTERVAL_MS = 2000;
   private readonly HEARTBEAT_TIMEOUT_MS = 20000;
-  private address: string = "";
+  private url: string = "";
   private helloPayload: HelloPayload | null = null;
   private intentionalDisconnect = false;
-  private relayUrl: string | undefined;
+  private rejectUnauthorized = true;
 
   get isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === ws.OPEN;
@@ -38,29 +39,22 @@ export class PairProgClient extends EventEmitter {
 
   // Connect
 
-  async connect(address: string, hello: HelloPayload, options?: { relayUrl?: string }): Promise<void> {
-    this.address = address;
+  async connect(url: string, hello: HelloPayload, options?: { rejectUnauthorized?: boolean }): Promise<void> {
+    this.url = url;
     this.helloPayload = hello;
     this.intentionalDisconnect = false;
-    this.relayUrl = options?.relayUrl;
+    this.rejectUnauthorized = options?.rejectUnauthorized ?? true;
 
     return this.doConnect();
   }
 
   private doConnect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = this.relayUrl || `wss://${this.address}`;
       const wsOptions: ws.ClientOptions = {
-        perMessageDeflate: {
-          zlibDeflateOptions: { level: 6 },
-          threshold: 256,
-        },
+        perMessageDeflate: WS_DEFLATE_OPTIONS,
+        rejectUnauthorized: this.rejectUnauthorized,
       };
-      // Only skip TLS verification for direct connections (self-signed certs)
-      if (!this.relayUrl) {
-        wsOptions.rejectUnauthorized = false;
-      }
-      this.socket = new ws.WebSocket(url, wsOptions);
+      this.socket = new ws.WebSocket(this.url, wsOptions);
 
       const onOpen = () => {
         this.reconnectAttempts = 0;

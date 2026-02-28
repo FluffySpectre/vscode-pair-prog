@@ -4,6 +4,7 @@ import WebSocketJSONStream from "@teamwork/websocket-json-stream";
 import * as ws from "ws";
 import { Connection } from "sharedb/lib/client";
 import { PairProgServer } from "./server";
+import { WS_DEFLATE_OPTIONS } from "./wsDefaults";
 
 ShareDB.types.register(otText);
 
@@ -20,10 +21,7 @@ export class ShareDBServer {
 
     this.wss = new ws.Server({
       noServer: true,
-      perMessageDeflate: {
-        zlibDeflateOptions: { level: 6 },
-        threshold: 256,
-      },
+      perMessageDeflate: WS_DEFLATE_OPTIONS,
     });
     this.wss.on("connection", (socket) => {
       const stream = new WebSocketJSONStream(socket);

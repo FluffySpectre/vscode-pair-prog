@@ -49,8 +49,7 @@ export function registerUriHandler(
         }
 
         if (decoded.type === "relay") {
-          const relayUrl = sessionManager.buildRelayMainUrl(decoded.relayUrl, decoded.code);
-          await sessionManager.connectToSession("relay", passphrase, { relayUrl, code: decoded.code });
+          await sessionManager.connectToSession("relay", passphrase, { baseUrl: decoded.relayUrl, code: decoded.code });
         } else {
           await sessionManager.connectToSession(decoded.address, passphrase);
         }

@@ -105,7 +105,7 @@ export class SessionManager {
 
     let address: string | undefined;
     let requiresPassphrase = false;
-    let relayInfo: { relayUrl: string; code: string } | undefined;
+    let relayInfo: { baseUrl: string; code: string } | undefined;
 
     await vscode.window.withProgress(
       {
@@ -206,7 +206,7 @@ export class SessionManager {
 
         if (picked.relayCode) {
           // Relay session selected
-          relayInfo = { relayUrl: this.buildRelayMainUrl(relayUrl!, picked.relayCode), code: picked.relayCode };
+          relayInfo = { baseUrl: relayUrl!, code: picked.relayCode };
           requiresPassphrase = picked.requiresPassphrase || false;
           address = "relay"; // Placeholder; connection goes through relay
         } else if (picked.action === "code") {
@@ -220,9 +220,8 @@ export class SessionManager {
           });
           if (!code) { return; }
           const trimmed = code.trim().toUpperCase();
-          relayInfo = { relayUrl: this.buildRelayMainUrl(relayUrl!, trimmed), code: trimmed };
+          relayInfo = { baseUrl: relayUrl!, code: trimmed };
           address = "relay";
-          // We don't know if it needs passphrase, so we'll ask anyway below
           requiresPassphrase = true;
         } else if (picked.sessionAddress) {
           address = picked.sessionAddress;
@@ -259,12 +258,7 @@ export class SessionManager {
     await this.connectToSession(address, passphrase, relayInfo);
   }
 
-  buildRelayMainUrl(relayUrl: string, code: string): string {
-    const base = relayUrl.replace(/\/+$/, "").replace(/^http/, "ws");
-    return `${base}/relay/${code}/main?role=client`;
-  }
-
-  async connectToSession(address: string, passphrase?: string, relay?: { relayUrl: string; code: string }): Promise<void> {
+  async connectToSession(address: string, passphrase?: string, relay?: { baseUrl: string; code: string }): Promise<void> {
     try {
       this.clientSession = new ClientSession(
         this.statusBar, this.context, this.vfsProvider, this.featureRegistry, this.messageRouter
@@ -317,7 +311,7 @@ export class SessionManager {
   async checkPendingReconnect(): Promise<void> {
     const pending = this.context.globalState.get<{
       address: string;
-      relay?: { relayUrl: string; code: string };
+      relay?: { baseUrl: string; code: string };
     }>("pairprog.pendingReconnect");
     if (pending) {
       this.context.globalState.update("pairprog.pendingReconnect", undefined);
@@ -327,7 +321,7 @@ export class SessionManager {
     }
   }
 
-  private async autoReconnect(address: string, relay?: { relayUrl: string; code: string }): Promise<void> {
+  private async autoReconnect(address: string, relay?: { baseUrl: string; code: string }): Promise<void> {
     try {
       const passphrase = await this.context.secrets.get("pairprog.reconnectPassphrase");
       await this.context.secrets.delete("pairprog.reconnectPassphrase");

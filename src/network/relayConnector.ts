@@ -1,6 +1,7 @@
 import * as ws from "ws";
 import * as http from "http";
 import * as https from "https";
+import { WS_DEFLATE_OPTIONS } from "./wsDefaults";
 
 export interface RelaySessionInfo {
   code: string;
@@ -40,6 +41,16 @@ export class RelayConnector {
     await this.httpRequest("DELETE", `/api/sessions/${code}`, undefined, { "Authorization": `Bearer ${adminToken}` });
   }
 
+  // Get the WebSocket URL for the main protocol channel (without opening a connection).
+  getMainChannelUrl(code: string, role: "host" | "client"): string {
+    return this.getChannelUrl(code, "main", role);
+  }
+
+  // Get the WebSocket URL for the ShareDB channel (without opening a connection).
+  getShareDBChannelUrl(code: string, role: "host" | "client"): string {
+    return this.getChannelUrl(code, "sharedb", role);
+  }
+
   // Open a WebSocket to the relay for the main protocol channel.
   openMainChannel(code: string, role: "host" | "client"): ws.WebSocket {
     return this.openChannel(code, "main", role);
@@ -50,14 +61,13 @@ export class RelayConnector {
     return this.openChannel(code, "sharedb", role);
   }
 
+  private getChannelUrl(code: string, channel: string, role: string): string {
+    return this.relayUrl.replace(/^http/, "ws") + `/relay/${code}/${channel}?role=${role}`;
+  }
+
   private openChannel(code: string, channel: string, role: string): ws.WebSocket {
-    const wsUrl = this.relayUrl
-      .replace(/^http/, "ws") + `/relay/${code}/${channel}?role=${role}`;
-    return new ws.WebSocket(wsUrl, {
-      perMessageDeflate: {
-        zlibDeflateOptions: { level: 6 },
-        threshold: 256,
-      },
+    return new ws.WebSocket(this.getChannelUrl(code, channel, role), {
+      perMessageDeflate: WS_DEFLATE_OPTIONS,
     });
   }
 

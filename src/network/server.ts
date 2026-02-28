@@ -12,6 +12,7 @@ import {
   deserialize,
   createMessage,
 } from "./protocol";
+import { WS_DEFLATE_OPTIONS } from "./wsDefaults";
 
 export interface ServerEvents {
   clientConnected: (hello: HelloPayload) => void;
@@ -57,10 +58,7 @@ export class PairProgServer extends EventEmitter {
       this._httpServer = https.createServer({ key: pems.private, cert: pems.cert });
       this.wsServer = new ws.Server({
         noServer: true,
-        perMessageDeflate: {
-          zlibDeflateOptions: { level: 6 },
-          threshold: 256,
-        },
+        perMessageDeflate: WS_DEFLATE_OPTIONS,
       });
 
       this._httpServer.on("error", (err) => {

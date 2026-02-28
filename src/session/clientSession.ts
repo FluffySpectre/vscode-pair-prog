@@ -23,6 +23,8 @@ import { getSystemUsername, toAbsoluteUri } from "../utils/pathUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
+import { RelayConnector } from "../network/relayConnector";
+import { WS_DEFLATE_OPTIONS } from "../network/wsDefaults";
 import { type as otText } from "ot-text";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -58,7 +60,7 @@ export class ClientSession implements vscode.Disposable {
   private _context: vscode.ExtensionContext;
   private _openFiles: string[] = [];
   private vfsProvider: PairProgFileSystemProvider;
-  private relay?: { relayUrl: string; code: string };
+  private relay?: { baseUrl: string; code: string };
 
   constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
     this.statusBar = statusBar;
@@ -74,7 +76,7 @@ export class ClientSession implements vscode.Disposable {
 
   // Connect
 
-  async connect(address: string, passphrase?: string, relay?: { relayUrl: string; code: string }): Promise<void> {
+  async connect(address: string, passphrase?: string, relay?: { baseUrl: string; code: string }): Promise<void> {
     this.address = address;
     this.passphrase = passphrase;
     this.relay = relay;
@@ -86,8 +88,19 @@ export class ClientSession implements vscode.Disposable {
       protocolVersion: PROTOCOL_VERSION,
     };
 
+    let url: string;
+    let rejectUnauthorized: boolean;
+    if (relay) {
+      const connector = new RelayConnector(relay.baseUrl);
+      url = connector.getMainChannelUrl(relay.code, "client");
+      rejectUnauthorized = true;
+    } else {
+      url = `wss://${address}`;
+      rejectUnauthorized = false;
+    }
+
     this.setupClientEvents();
-    await this.client.connect(address, hello, relay ? { relayUrl: relay.relayUrl } : undefined);
+    await this.client.connect(url, hello, { rejectUnauthorized });
   }
 
   // Disconnect
@@ -263,21 +276,12 @@ export class ClientSession implements vscode.Disposable {
 
     if (this.relay) {
       // Connect ShareDB through the relay server
-      const relayBase = this.relay.relayUrl.replace(/\/relay\/.*$/, "");
-      const sharedbUrl = `${relayBase}/relay/${this.relay.code}/sharedb?role=client`;
-      this.sharedbSocket = new ws.WebSocket(sharedbUrl, {
-        perMessageDeflate: {
-          zlibDeflateOptions: { level: 6 },
-          threshold: 256,
-        },
-      });
+      const connector = new RelayConnector(this.relay.baseUrl);
+      this.sharedbSocket = connector.openShareDBChannel(this.relay.code, "client");
     } else {
       this.sharedbSocket = new ws.WebSocket(`wss://${this.address}/sharedb`, {
-        perMessageDeflate: {
-          zlibDeflateOptions: { level: 6 },
-          threshold: 256,
-        },
-        rejectUnauthorized: false, // Accept the host's self-signed TLS certificate
+        perMessageDeflate: WS_DEFLATE_OPTIONS,
+        rejectUnauthorized: false,
       });
     }
     const sharedbConnection = new ShareDBClient.Connection(this.sharedbSocket);

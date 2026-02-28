@@ -25,8 +25,7 @@ import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathU
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
 import { encodeInviteCode, encodeRelayInviteCode } from "../network/inviteCode";
-import { RelayConnector } from "../network/relayConnector";
-import * as ws from "ws";
+import { HostRelayBridge } from "../network/hostRelayBridge";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -61,11 +60,7 @@ export class HostSession implements vscode.Disposable {
   private readonly DISCONNECT_GRACE_MS = 6000;
 
   // Relay
-  private relayConnector: RelayConnector | null = null;
-  private _relayCode: string = "";
-  private relayAdminToken: string = "";
-  private relayMainSocket: ws.WebSocket | null = null;
-  private relaySharedbSocket: ws.WebSocket | null = null;
+  private relayBridge: HostRelayBridge | null = null;
 
   constructor(statusBar: StatusBar, context: vscode.ExtensionContext, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
     this.statusBar = statusBar;
@@ -119,30 +114,28 @@ export class HostSession implements vscode.Disposable {
     const relayUrl = config.get<string>("relayServer");
     if (relayUrl) {
       try {
-        this.relayConnector = new RelayConnector(relayUrl);
-        const relaySession = await this.relayConnector.register(
+        this.relayBridge = new HostRelayBridge(relayUrl);
+        await this.relayBridge.register(
           this.username,
           wsFolder?.name ?? "workspace",
           !!this.passphrase,
         );
-        this._relayCode = relaySession.code;
-        this.relayAdminToken = relaySession.adminToken ?? "";
-        this.openRelayChannels();
+        this.relayBridge.openChannels(this.server, this.sharedbServer!);
         // Regenerate invite link with relay info
-        const relayInvite = encodeRelayInviteCode(relayUrl, this._relayCode, !!this.passphrase);
+        const relayInvite = encodeRelayInviteCode(relayUrl, this.relayBridge.sessionCode, !!this.passphrase);
         this._inviteLink = `vscode://bjoernbosse.vscode-pair-prog/join?code=${relayInvite}`;
-        console.log(`[PairProg Host] Registered on relay with code: ${this._relayCode}`);
+        console.log(`[PairProg Host] Registered on relay with code: ${this.relayBridge.sessionCode}`);
       } catch (err: any) {
         console.warn("[PairProg Host] Failed to register with relay server:", err.message);
         vscode.window.showWarningMessage(
           `Could not register with relay server: ${err.message}. LAN connections still work.`
         );
-        this.relayConnector = null;
+        this.relayBridge = null;
       }
     }
 
     const actions = ["Copy Invite Link", "Copy Address"];
-    if (this._relayCode) {
+    if (this.relayBridge?.sessionCode) {
       actions.push("Copy Session Code");
     }
     vscode.window.showInformationMessage(
@@ -154,8 +147,9 @@ export class HostSession implements vscode.Disposable {
       } else if (action === "Copy Address") {
         vscode.env.clipboard.writeText(this.address);
       } else if (action === "Copy Session Code") {
-        vscode.env.clipboard.writeText(this._relayCode);
-        vscode.window.showInformationMessage(`Session code "${this._relayCode}" copied to clipboard.`);
+        const code = this.relayBridge!.sessionCode;
+        vscode.env.clipboard.writeText(code);
+        vscode.window.showInformationMessage(`Session code "${code}" copied to clipboard.`);
       }
     });
 
@@ -190,12 +184,10 @@ export class HostSession implements vscode.Disposable {
       this.disconnectGraceTimer = null;
     }
     this.teardownSync();
-    this.closeRelayChannels();
-    if (this.relayConnector && this._relayCode) {
-      this.relayConnector.unregister(this._relayCode, this.relayAdminToken).catch(() => {});
-      this.relayConnector = null;
-      this._relayCode = "";
-      this.relayAdminToken = "";
+    if (this.relayBridge) {
+      this.relayBridge.unregister();
+      this.relayBridge.dispose();
+      this.relayBridge = null;
     }
     this.sharedbServer?.stop();
     this.sharedbServer = null;
@@ -304,8 +296,8 @@ export class HostSession implements vscode.Disposable {
     this.statusBar.setHosting(this.address);
 
     // Re-open relay channels so the next client can join via relay
-    if (this.relayConnector && this._relayCode) {
-      this.openRelayChannels();
+    if (this.relayBridge) {
+      this.relayBridge.openChannels(this.server, this.sharedbServer!);
     }
 
     const disconnectedUser = this.clientUsername || "Client";
@@ -489,42 +481,7 @@ export class HostSession implements vscode.Disposable {
   }
 
   get relayCode(): string {
-    return this._relayCode;
-  }
-
-  // Relay channel management
-
-  private openRelayChannels(): void {
-    if (!this.relayConnector || !this._relayCode) { return; }
-
-    this.closeRelayChannels();
-
-    this.relayMainSocket = this.relayConnector.openMainChannel(this._relayCode, "host");
-    this.relayMainSocket.on("open", () => {
-      this.server.adoptRelaySocket(this.relayMainSocket!);
-    });
-    this.relayMainSocket.on("error", (err) => {
-      console.warn("[PairProg Host] Relay main socket error:", err.message);
-    });
-
-    this.relaySharedbSocket = this.relayConnector.openShareDBChannel(this._relayCode, "host");
-    this.relaySharedbSocket.on("open", () => {
-      this.sharedbServer?.adoptRelaySocket(this.relaySharedbSocket!);
-    });
-    this.relaySharedbSocket.on("error", (err) => {
-      console.warn("[PairProg Host] Relay ShareDB socket error:", err.message);
-    });
-  }
-
-  private closeRelayChannels(): void {
-    if (this.relayMainSocket) {
-      try { this.relayMainSocket.close(); } catch { /* ignore */ }
-      this.relayMainSocket = null;
-    }
-    if (this.relaySharedbSocket) {
-      try { this.relaySharedbSocket.close(); } catch { /* ignore */ }
-      this.relaySharedbSocket = null;
-    }
+    return this.relayBridge?.sessionCode ?? "";
   }
 
   // Dispose

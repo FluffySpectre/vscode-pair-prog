@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import WebSocket from "ws";
 
 export interface SessionInfo {
@@ -23,7 +24,7 @@ const CODE_LENGTH = 6;
 function generateCode(): string {
   let code = "";
   for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    code += CODE_CHARS[randomInt(CODE_CHARS.length)];
   }
   return code;
 }

@@ -16,7 +16,7 @@ import {
   SerializedRange,
   createMessage,
 } from "../network/protocol";
-import { toRelativePath, toAbsoluteUri } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, isSafeRelativePath } from "../utils/pathUtils";
 
 const TIMEOUT_MS = 5000;
 const SYNC_DELAY_MS = 100;
@@ -253,6 +253,11 @@ export class IntellisenseSync implements vscode.Disposable, MessageHandler {
   // Host: request handler
 
   private async handleRequest(payload: IntellisenseRequestPayload): Promise<void> {
+    if (!isSafeRelativePath(payload.filePath)) {
+      console.warn(`[PairProg Host] Rejected IntelliSense request with unsafe path: ${payload.filePath}`);
+      return;
+    }
+
     // Wait for ShareDB to sync the triggering keystroke (see SYNC_DELAY_MS)
     await new Promise((r) => setTimeout(r, SYNC_DELAY_MS));
 

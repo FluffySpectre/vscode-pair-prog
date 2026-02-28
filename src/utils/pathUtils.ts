@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 
 const SYNCABLE_SCHEMES = new Set(["file", "pairprog"]);
 
@@ -44,6 +45,19 @@ export function toRelativePathFromRoot(uri: vscode.Uri, workspaceRoot: string): 
     return null;
   }
   return filePath.slice(workspaceRoot.length + 1).replace(/\\/g, "/");
+}
+
+export function isSafeRelativePath(relativePath: string): boolean {
+  if (path.isAbsolute(relativePath)) {
+    return false;
+  }
+
+  const resolved = path.posix.normalize(relativePath);
+  if (resolved.startsWith("..") || path.isAbsolute(resolved)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function getSystemUsername(fallback: string): string {

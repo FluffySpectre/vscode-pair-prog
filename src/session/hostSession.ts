@@ -21,7 +21,7 @@ import { FileOpsSync } from "../sync/fileOpsSync";
 import { DiagnosticsSync } from "../sync/diagnosticsSync";
 import { IntellisenseSync } from "../sync/intellisenseSync";
 import { StatusBar } from "../ui/statusBar";
-import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, getSystemUsername, isSafeRelativePath } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
 import { encodeInviteCode, encodeRelayInviteCode } from "../network/inviteCode";
@@ -397,6 +397,11 @@ export class HostSession implements vscode.Disposable {
   // File content serving
 
   private async handleFileContentRequest(payload: FileContentRequestPayload): Promise<void> {
+    if (!isSafeRelativePath(payload.filePath)) {
+      console.warn(`[PairProg Host] Rejected file content request with unsafe path: ${payload.filePath}`);
+      return;
+    }
+
     try {
       const uri = toAbsoluteUri(payload.filePath);
       const rawBytes = await vscode.workspace.fs.readFile(uri);

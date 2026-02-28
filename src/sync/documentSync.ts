@@ -7,7 +7,7 @@ import {
   FileSavedPayload,
   createMessage,
 } from "../network/protocol";
-import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
+import { toRelativePath, toAbsoluteUri, isSyncableDocument, isSafeRelativePath } from "../utils/pathUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
 
 /**
@@ -85,6 +85,11 @@ export class DocumentSync implements vscode.Disposable, MessageHandler {
   // Host: client requested a file save
 
   async handleFileSaveRequest(payload: FileSaveRequestPayload): Promise<void> {
+    if (!isSafeRelativePath(payload.filePath)) {
+      console.warn(`[PairProg Host] Rejected file save request with unsafe path: ${payload.filePath}`);
+      return;
+    }
+
     const uri = toAbsoluteUri(payload.filePath);
     try {
       const doc = await vscode.workspace.openTextDocument(uri);

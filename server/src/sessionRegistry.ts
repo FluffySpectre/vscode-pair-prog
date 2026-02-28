@@ -1,4 +1,4 @@
-import { randomInt } from "crypto";
+import { randomInt, randomBytes } from "crypto";
 import WebSocket from "ws";
 
 export interface SessionInfo {
@@ -9,8 +9,14 @@ export interface SessionInfo {
   createdAt: number;
 }
 
+export interface SessionCreateResult {
+  info: SessionInfo;
+  adminToken: string;
+}
+
 export interface SessionRoom {
   info: SessionInfo;
+  adminToken: string;
   channels: {
     main: { host?: WebSocket; client?: WebSocket };
     sharedb: { host?: WebSocket; client?: WebSocket };
@@ -50,11 +56,13 @@ export class SessionRegistry {
     }
   }
 
-  createSession(name: string, workspace: string, requiresPassphrase: boolean): SessionInfo {
+  createSession(name: string, workspace: string, requiresPassphrase: boolean): SessionCreateResult {
     let code: string;
     do {
       code = generateCode();
     } while (this.sessions.has(code));
+
+    const adminToken = randomBytes(32).toString("hex");
 
     const info: SessionInfo = {
       code,
@@ -66,13 +74,20 @@ export class SessionRegistry {
 
     this.sessions.set(code, {
       info,
+      adminToken,
       channels: {
         main: {},
         sharedb: {},
       },
     });
 
-    return info;
+    return { info, adminToken };
+  }
+
+  validateAdminToken(code: string, token: string): boolean {
+    const room = this.sessions.get(code);
+    if (!room) { return false; }
+    return room.adminToken === token;
   }
 
   getSession(code: string): SessionRoom | undefined {

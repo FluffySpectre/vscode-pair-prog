@@ -14,11 +14,26 @@ const registry = new SessionRegistry();
 const app = express();
 app.use(express.json());
 
+function requireAdminToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const code = req.params.code as string;
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Authorization header required" });
+    return;
+  }
+  const token = auth.slice(7);
+  if (!registry.validateAdminToken(code, token)) {
+    res.status(403).json({ error: "Invalid admin token" });
+    return;
+  }
+  next();
+}
+
 // CORS
 app.use((_req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   next();
 });
 app.options("/{*path}", (_req, res) => { res.sendStatus(204); });
@@ -30,8 +45,8 @@ app.post("/api/sessions", (req, res) => {
     res.status(400).json({ error: "name and workspace are required" });
     return;
   }
-  const session = registry.createSession(name, workspace, !!requiresPassphrase);
-  res.status(201).json(session);
+  const { info, adminToken } = registry.createSession(name, workspace, !!requiresPassphrase);
+  res.status(201).json({ ...info, adminToken });
 });
 
 // GET /api/sessions - List active sessions
@@ -44,9 +59,9 @@ app.get("/api/sessions", (_req, res) => {
   res.json({ sessions });
 });
 
-// DELETE /api/sessions/:code - Remove a session
-app.delete("/api/sessions/:code", (req, res) => {
-  registry.removeSession(req.params.code);
+// DELETE /api/sessions/:code - Remove a session (requires admin token)
+app.delete("/api/sessions/:code", requireAdminToken, (req, res) => {
+  registry.removeSession(req.params.code as string);
   res.sendStatus(204);
 });
 

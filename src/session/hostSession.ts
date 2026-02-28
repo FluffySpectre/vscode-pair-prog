@@ -63,6 +63,7 @@ export class HostSession implements vscode.Disposable {
   // Relay
   private relayConnector: RelayConnector | null = null;
   private _relayCode: string = "";
+  private relayAdminToken: string = "";
   private relayMainSocket: ws.WebSocket | null = null;
   private relaySharedbSocket: ws.WebSocket | null = null;
 
@@ -125,6 +126,7 @@ export class HostSession implements vscode.Disposable {
           !!this.passphrase,
         );
         this._relayCode = relaySession.code;
+        this.relayAdminToken = relaySession.adminToken ?? "";
         this.openRelayChannels();
         // Regenerate invite link with relay info
         const relayInvite = encodeRelayInviteCode(relayUrl, this._relayCode, !!this.passphrase);
@@ -190,9 +192,10 @@ export class HostSession implements vscode.Disposable {
     this.teardownSync();
     this.closeRelayChannels();
     if (this.relayConnector && this._relayCode) {
-      this.relayConnector.unregister(this._relayCode).catch(() => {});
+      this.relayConnector.unregister(this._relayCode, this.relayAdminToken).catch(() => {});
       this.relayConnector = null;
       this._relayCode = "";
+      this.relayAdminToken = "";
     }
     this.sharedbServer?.stop();
     this.sharedbServer = null;

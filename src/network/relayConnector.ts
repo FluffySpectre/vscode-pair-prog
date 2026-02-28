@@ -8,6 +8,7 @@ export interface RelaySessionInfo {
   workspace: string;
   requiresPassphrase: boolean;
   createdAt: number;
+  adminToken?: string;
 }
 
 /**
@@ -35,8 +36,8 @@ export class RelayConnector {
   }
 
   // Unregister a session from the relay server.
-  async unregister(code: string): Promise<void> {
-    await this.httpRequest("DELETE", `/api/sessions/${code}`);
+  async unregister(code: string, adminToken: string): Promise<void> {
+    await this.httpRequest("DELETE", `/api/sessions/${code}`, undefined, { "Authorization": `Bearer ${adminToken}` });
   }
 
   // Open a WebSocket to the relay for the main protocol channel.
@@ -60,18 +61,24 @@ export class RelayConnector {
     });
   }
 
-  private httpRequest(method: string, path: string, body?: string): Promise<string> {
+  private httpRequest(method: string, path: string, body?: string, extraHeaders?: Record<string, string>): Promise<string> {
     return new Promise((resolve, reject) => {
       const url = new URL(this.relayUrl + path);
       const isHttps = url.protocol === "https:";
       const mod = isHttps ? https : http;
+
+      const headers: Record<string, string | number> = { ...extraHeaders };
+      if (body) {
+        headers["Content-Type"] = "application/json";
+        headers["Content-Length"] = Buffer.byteLength(body);
+      }
 
       const options: http.RequestOptions = {
         hostname: url.hostname,
         port: url.port || (isHttps ? 443 : 80),
         path: url.pathname + url.search,
         method,
-        headers: body ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } : {},
+        headers,
       };
 
       const req = mod.request(options, (res) => {

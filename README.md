@@ -14,7 +14,7 @@ Real-time peer-to-peer pair programming on a shared workspace.
 - **Collaborative Whiteboard** - Shared canvas with pen, shapes, arrows, text, undo/redo, zoom/pan, and save as PNG
 - **Terminal Sharing** - Host streams terminal output to the client as a read-only remote terminal
 - **Edit Access Control** - Client connects read-only by default; host can grant edit access
-- **Session Discovery** - Auto-discovers sessions on LAN, plus manual address entry and invite links
+- **Session Discovery** - Auto-discovers sessions on LAN, or connect via an optional relay server for remote pairing
 - **Passphrase Protection** - Optionally protect sessions with a passphrase
 - **Virtual Filesystem** - Client views files in-memory with no local disk writes
 
@@ -28,6 +28,8 @@ Real-time peer-to-peer pair programming on a shared workspace.
 4. Copy the **invite link** or the displayed address (e.g., `192.168.1.5:9876`)
 5. Share the invite link or address with your partner
 
+> **Relay mode:** If `pairprog.relayServer` is configured, the session is registered on the relay server and the invite link works across networks.
+
 ### Join a Session
 
 There are two ways to join a session:
@@ -40,7 +42,7 @@ There are two ways to join a session:
 **Manually:**
 1. Open VSCode
 2. Run command: **PairProg: Join Session**
-3. The extension scans your LAN for active sessions - select a discovered session or enter the host's address manually (e.g., `192.168.1.5:9876`)
+3. The extension scans your LAN (and the relay server, if configured) for active sessions — select a discovered session or enter the host's address manually (e.g., `192.168.1.5:9876`)
 4. Enter the passphrase if the session is protected
 5. You're connected - edits sync in real-time. Wohooo!
 
@@ -51,23 +53,6 @@ When you start hosting, the extension generates an invite link. You can:
 - **Copy it from the notification** shown when the session starts
 - **Copy it from the status bar menu** at any time during the session
 
-## How It Works
-
-```
-┌──────────────┐     WebSocket (LAN)     ┌──────────────┐
-│     HOST     │<----------------------->│    CLIENT    │
-│              │                         │              │
-│  Source of   │  <-- ShareDB OT  ---->  │  Edits sync  │
-│  truth for   │  -- CursorUpdate <--->  │  via OT in   │
-│  all files   │  -- ChatMessage  <--->  │  real-time   │
-│              │  -- FileCreated ----->  │              │
-│  Files saved │  -- FileDeleted ----->  │              │
-│  to disk     │  -- FileRenamed ----->  │  No disk     │
-│  HERE only   │  <-- FileSaveRequest    │  writes for  │
-│              │  -- FileSaved  ------>  │  text edits  │
-└──────────────┘                         └──────────────┘
-```
-
 ## Configuration
 
 | Setting                   | Default       | Description                          |
@@ -76,11 +61,52 @@ When you start hosting, the extension generates an invite link. You can:
 | `pairprog.username`         | OS username   | Your display name                    |
 | `pairprog.highlightColor`   | `#ec15ef`     | Remote partner's cursor color        |
 | `pairprog.ignoredPatterns`  | see below     | Glob patterns to exclude from sync   |
+| `pairprog.relayServer`      |               | URL of a relay server for remote connections (e.g. `https://relay.example.com:3000`) |
 
 Default ignored patterns:
 ```json
 ["**/node_modules/**", "**/.git/**", "*.lock", "**/out/**", "**/dist/**", "**/Library/**", "**/vendor/**"]
 ```
+
+## Relay Server (Optional)
+
+When direct peer-to-peer connections aren't possible (NAT, firewalls, different networks), you can run a relay server that both host and client connect to.
+
+### Running the Server
+
+```bash
+cd server
+npm install
+npm run build
+npm start
+```
+
+Or with Docker:
+
+```bash
+docker build -t pairprog-relay ./server
+docker run -p 3000:3000 pairprog-relay
+```
+
+### Environment Variables
+
+| Variable              | Default | Description                                      |
+|-----------------------|---------|--------------------------------------------------|
+| `PORT`                | `3000`  | Server port                                      |
+| `TLS_CERT_PATH`      |         | Path to TLS certificate (enables HTTPS/WSS)      |
+| `TLS_KEY_PATH`       |         | Path to TLS private key                          |
+| `DISCOVERY_ENABLED`  | `true`  | Set to `false` to disable the session list endpoint |
+
+### API
+
+| Method   | Endpoint              | Description                  |
+|----------|-----------------------|------------------------------|
+| `GET`    | `/health`             | Health check                 |
+| `POST`   | `/api/sessions`       | Register a new session       |
+| `GET`    | `/api/sessions`       | List active sessions         |
+| `DELETE` | `/api/sessions/:code` | Remove a session (requires admin token) |
+
+WebSocket channels at `/relay/:code/main` and `/relay/:code/sharedb` handle the real-time communication.
 
 ## Commands
 

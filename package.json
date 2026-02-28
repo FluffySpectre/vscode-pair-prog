@@ -120,7 +120,7 @@
         "pairprog.relayServer": {
           "type": "string",
           "default": "",
-          "description": "URL of a relay server for session discovery and connection (e.g., http://relay.example.com:3000). Leave empty to disable."
+          "description": "URL of a relay server for session discovery and connection (e.g., https://relay.example.com:3000). Leave empty to disable."
         }
       }
     }

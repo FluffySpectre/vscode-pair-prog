@@ -97,17 +97,6 @@ docker run -p 3000:3000 pairprog-relay
 | `TLS_KEY_PATH`       |         | Path to TLS private key                          |
 | `DISCOVERY_ENABLED`  | `true`  | Set to `false` to disable the session list endpoint |
 
-### API
-
-| Method   | Endpoint              | Description                  |
-|----------|-----------------------|------------------------------|
-| `GET`    | `/health`             | Health check                 |
-| `POST`   | `/api/sessions`       | Register a new session       |
-| `GET`    | `/api/sessions`       | List active sessions         |
-| `DELETE` | `/api/sessions/:code` | Remove a session (requires admin token) |
-
-WebSocket channels at `/relay/:code/main` and `/relay/:code/sharedb` handle the real-time communication.
-
 ## Commands
 
 | Command                            | Keybinding                          | Description                                                      |

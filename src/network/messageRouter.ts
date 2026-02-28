@@ -28,7 +28,9 @@ export class MessageRouter {
     if (!handler) {
       return false;
     }
-    handler.handleMessage(msg);
+    Promise.resolve(handler.handleMessage(msg)).catch((err) => {
+      console.error(`[PairProg] Error handling message type "${msg.type}":`, err);
+    });
     return true;
   }
 }

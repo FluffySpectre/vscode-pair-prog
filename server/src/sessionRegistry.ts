@@ -51,7 +51,8 @@ export class SessionRegistry {
       this.cleanupTimer = null;
     }
     // Close all sessions
-    for (const [code] of this.sessions) {
+    const codes = Array.from(this.sessions.keys());
+    for (const code of codes) {
       this.removeSession(code);
     }
   }

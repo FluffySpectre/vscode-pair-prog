@@ -1,12 +1,15 @@
+import fs from "fs";
 import http from "http";
+import https from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import { SessionRegistry } from "./sessionRegistry";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
+const TLS_CERT_PATH = process.env.TLS_CERT_PATH;
+const TLS_KEY_PATH = process.env.TLS_KEY_PATH;
 const registry = new SessionRegistry();
 
-// HTTP server for the REST API
-const httpServer = http.createServer((req, res) => {
+const requestHandler: http.RequestListener = (req, res) => {
   // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -20,7 +23,7 @@ const httpServer = http.createServer((req, res) => {
 
   const url = new URL(req.url || "/", `http://localhost:${PORT}`);
 
-  // POST /api/sessions — Register a new session
+  // POST /api/sessions - Register a new session
   if (req.method === "POST" && url.pathname === "/api/sessions") {
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
@@ -43,7 +46,7 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  // GET /api/sessions — List active sessions
+  // GET /api/sessions - List active sessions
   if (req.method === "GET" && url.pathname === "/api/sessions") {
     const sessions = registry.listSessions();
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -51,7 +54,7 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  // DELETE /api/sessions/:code — Remove a session
+  // DELETE /api/sessions/:code - Remove a session
   if (req.method === "DELETE" && url.pathname.startsWith("/api/sessions/")) {
     const code = url.pathname.split("/")[3];
     if (!code) {
@@ -74,7 +77,16 @@ const httpServer = http.createServer((req, res) => {
 
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
-});
+};
+
+let httpServer: http.Server | https.Server;
+if (TLS_CERT_PATH && TLS_KEY_PATH) {
+  const cert = fs.readFileSync(TLS_CERT_PATH, "utf-8");
+  const key = fs.readFileSync(TLS_KEY_PATH, "utf-8");
+  httpServer = https.createServer({ cert, key }, requestHandler);
+} else {
+  httpServer = http.createServer(requestHandler);
+}
 
 // WebSocket server for relay channels
 const wss = new WebSocketServer({ server: httpServer });
@@ -126,8 +138,9 @@ wss.on("connection", (socket: WebSocket, req) => {
 
 // Start
 registry.start();
+const protocol = TLS_CERT_PATH && TLS_KEY_PATH ? "HTTPS" : "HTTP";
 httpServer.listen(PORT, () => {
-  console.log(`[Relay] Server listening on port ${PORT}`);
+  console.log(`[Relay] Server listening on port ${PORT} (${protocol})`);
 });
 
 // Graceful shutdown

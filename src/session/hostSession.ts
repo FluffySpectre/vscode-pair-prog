@@ -24,7 +24,7 @@ import { StatusBar } from "../ui/statusBar";
 import { toRelativePath, toAbsoluteUri, getSystemUsername } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
-import { encodeInviteCode } from "../network/inviteCode";
+import { encodeInviteCode, encodeRelayInviteCode } from "../network/inviteCode";
 import { RelayConnector } from "../network/relayConnector";
 import * as ws from "ws";
 
@@ -126,6 +126,9 @@ export class HostSession implements vscode.Disposable {
         );
         this._relayCode = relaySession.code;
         this.openRelayChannels();
+        // Regenerate invite link with relay info
+        const relayInvite = encodeRelayInviteCode(relayUrl, this._relayCode, !!this.passphrase);
+        this._inviteLink = `vscode://bjoernbosse.vscode-pair-prog/join?code=${relayInvite}`;
         console.log(`[PairProg Host] Registered on relay with code: ${this._relayCode}`);
       } catch (err: any) {
         console.warn("[PairProg Host] Failed to register with relay server:", err.message);

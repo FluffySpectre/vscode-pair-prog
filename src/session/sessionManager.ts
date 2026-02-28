@@ -259,7 +259,7 @@ export class SessionManager {
     await this.connectToSession(address, passphrase, relayInfo);
   }
 
-  private buildRelayMainUrl(relayUrl: string, code: string): string {
+  buildRelayMainUrl(relayUrl: string, code: string): string {
     const base = relayUrl.replace(/\/+$/, "").replace(/^http/, "ws");
     return `${base}/relay/${code}/main?role=client`;
   }

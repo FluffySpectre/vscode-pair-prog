@@ -30,7 +30,7 @@ export function registerUriHandler(
           return;
         }
 
-        let decoded: { address: string; requiresPassphrase: boolean };
+        let decoded;
         try {
           decoded = decodeInviteCode(code);
         } catch (err: any) {
@@ -48,7 +48,12 @@ export function registerUriHandler(
           if (passphrase === undefined) { return; }
         }
 
-        await sessionManager.connectToSession(decoded.address, passphrase);
+        if (decoded.type === "relay") {
+          const relayUrl = sessionManager.buildRelayMainUrl(decoded.relayUrl, decoded.code);
+          await sessionManager.connectToSession("relay", passphrase, { relayUrl, code: decoded.code });
+        } else {
+          await sessionManager.connectToSession(decoded.address, passphrase);
+        }
       },
     })
   );

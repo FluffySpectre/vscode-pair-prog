@@ -1,6 +1,7 @@
 import fs from "fs";
 import http from "http";
 import https from "https";
+import express from "express";
 import { WebSocketServer, WebSocket } from "ws";
 import { SessionRegistry } from "./sessionRegistry";
 
@@ -10,88 +11,57 @@ const TLS_KEY_PATH = process.env.TLS_KEY_PATH;
 const DISCOVERY_ENABLED = process.env.DISCOVERY_ENABLED?.toLowerCase() !== "false";
 const registry = new SessionRegistry();
 
-const requestHandler: http.RequestListener = (req, res) => {
-  // CORS headers
+const app = express();
+app.use(express.json());
+
+// CORS
+app.use((_req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
+app.options("/{*path}", (_req, res) => { res.sendStatus(204); });
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
+// POST /api/sessions - Register a new session
+app.post("/api/sessions", (req, res) => {
+  const { name, workspace, requiresPassphrase } = req.body;
+  if (!name || !workspace) {
+    res.status(400).json({ error: "name and workspace are required" });
     return;
   }
+  const session = registry.createSession(name, workspace, !!requiresPassphrase);
+  res.status(201).json(session);
+});
 
-  const url = new URL(req.url || "/", `http://localhost:${PORT}`);
-
-  // POST /api/sessions - Register a new session
-  if (req.method === "POST" && url.pathname === "/api/sessions") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", () => {
-      try {
-        const { name, workspace, requiresPassphrase } = JSON.parse(body);
-        if (!name || !workspace) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "name and workspace are required" }));
-          return;
-        }
-        const session = registry.createSession(name, workspace, !!requiresPassphrase);
-        res.writeHead(201, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(session));
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid JSON body" }));
-      }
-    });
+// GET /api/sessions - List active sessions
+app.get("/api/sessions", (_req, res) => {
+  if (!DISCOVERY_ENABLED) {
+    res.status(403).json({ error: "Session discovery is disabled" });
     return;
   }
+  const sessions = registry.listSessions();
+  res.json({ sessions });
+});
 
-  // GET /api/sessions - List active sessions
-  if (req.method === "GET" && url.pathname === "/api/sessions") {
-    if (!DISCOVERY_ENABLED) {
-      res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Session discovery is disabled" }));
-      return;
-    }
-    const sessions = registry.listSessions();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ sessions }));
-    return;
-  }
+// DELETE /api/sessions/:code - Remove a session
+app.delete("/api/sessions/:code", (req, res) => {
+  registry.removeSession(req.params.code);
+  res.sendStatus(204);
+});
 
-  // DELETE /api/sessions/:code - Remove a session
-  if (req.method === "DELETE" && url.pathname.startsWith("/api/sessions/")) {
-    const code = url.pathname.split("/")[3];
-    if (!code) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Session code required" }));
-      return;
-    }
-    registry.removeSession(code);
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  // Health check
-  if (req.method === "GET" && url.pathname === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
-    return;
-  }
-
-  res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found" }));
-};
+// Health check
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
 
 let httpServer: http.Server | https.Server;
 if (TLS_CERT_PATH && TLS_KEY_PATH) {
   const cert = fs.readFileSync(TLS_CERT_PATH, "utf-8");
   const key = fs.readFileSync(TLS_KEY_PATH, "utf-8");
-  httpServer = https.createServer({ cert, key }, requestHandler);
+  httpServer = https.createServer({ cert, key }, app);
 } else {
-  httpServer = http.createServer(requestHandler);
+  httpServer = http.createServer(app);
 }
 
 // WebSocket server for relay channels

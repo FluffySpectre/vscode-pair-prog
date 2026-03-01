@@ -97,6 +97,11 @@ docker run -p 3000:3000 pairprog-relay
 | `TLS_KEY_PATH`       |         | Path to TLS private key                          |
 | `DISCOVERY_ENABLED`  | `true`  | Set to `false` to disable the session list endpoint |
 
+#### Example (Disable session discovery):
+```
+docker run -d -p 3000:3000 -e DISCOVERY_ENABLED=false pairprog-relay 
+```
+
 ## Commands
 
 | Command                            | Keybinding                          | Description                                                      |

@@ -130,7 +130,9 @@
     "compile": "node esbuild.mjs --production",
     "watch": "node esbuild.mjs --watch",
     "check": "tsc -p ./ --noEmit",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@teamwork/websocket-json-stream": "^2.0.0",
@@ -146,6 +148,7 @@
     "@types/vscode": "^1.109.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.27.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }

@@ -72,40 +72,59 @@ async function showStatusBarMenu(
 ): Promise<void> {
   const items: vscode.QuickPickItem[] = [];
 
-  if (sessionManager.isHosting) {
+  if (sessionManager.isHosting && sessionManager.hasClientConnected) {
     if (!sessionManager.hasGrantedEditAccess) {
       items.push({ label: "$(lock) Grant Edit Access", description: "Allow partner to edit files" });
-    } /*else {
-      items.push({ label: "$(check) Edit Access Granted", description: "Partner can edit files" });
-    }*/
-
+    }
     items.push(
       { label: "$(eye) Toggle Follow Mode", description: "" },
       { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
     );
 
-    for (const cmd of featureRegistry.getCommands("host" as SessionRole)) {
-      items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
+    const hostCmds = featureRegistry.getCommands("host" as SessionRole)
+      .filter((cmd) => !cmd.isVisible || cmd.isVisible());
+    if (hostCmds.length > 0) {
+      items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+      for (const cmd of hostCmds) {
+        items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
+      }
     }
 
     items.push(
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
+      { label: "$(info) About", description: "" },
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
+      { label: "$(debug-stop) Stop Hosting", description: "" },
+    );
+  } else if (sessionManager.isHosting) {
+    items.push(
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(link) Copy Invite Link", description: "" },
       { label: "$(copy) Copy Session Address", description: sessionManager.sessionAddress },
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(info) About", description: "" },
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(debug-stop) Stop Hosting", description: "" },
     );
   } else if (sessionManager.isClient) {
     items.push(
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(eye) Toggle Follow Mode", description: "" },
       { label: "$(location) Jump to Partner", description: "(Ctrl+Shift+J)" },
     );
 
-    for (const cmd of featureRegistry.getCommands("client" as SessionRole)) {
-      items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
+    const clientCmds = featureRegistry.getCommands("client" as SessionRole).filter((cmd) => !cmd.isVisible || cmd.isVisible());
+    if (clientCmds.length > 0) {
+      items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+      for (const cmd of clientCmds) {
+        items.push({ label: `$(${cmd.icon}) ${cmd.label}`, description: cmd.description || "" });
+      }
     }
 
     items.push(
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(info) About", description: "" },
+      { label: "", kind: vscode.QuickPickItemKind.Separator },
       { label: "$(debug-disconnect) Disconnect", description: "" },
     );
   } else {

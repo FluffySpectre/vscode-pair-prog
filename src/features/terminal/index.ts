@@ -55,6 +55,7 @@ export class TerminalFeature implements Feature {
         label: "Share Terminal",
         icon: "terminal",
         roles: ["host"],
+        isVisible: () => !this.terminalSync?.isSharing,
         execute: () => this.shareTerminal(),
       },
       {
@@ -62,6 +63,7 @@ export class TerminalFeature implements Feature {
         label: "Stop Sharing Terminal",
         icon: "terminal-kill",
         roles: ["host"],
+        isVisible: () => !!this.terminalSync?.isSharing,
         execute: () => this.stopSharingTerminal(),
       },
     ];

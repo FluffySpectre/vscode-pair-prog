@@ -41,6 +41,10 @@ export class SessionManager {
     return this.hostSession?.inviteLink ?? "";
   }
 
+  get hasClientConnected(): boolean {
+    return this.hostSession?.hasClientConnected ?? false;
+  }
+
   get hasGrantedEditAccess(): boolean {
     return this.hostSession?.hasGrantedEditAccess ?? false;
   }

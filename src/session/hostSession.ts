@@ -461,6 +461,10 @@ export class HostSession implements vscode.Disposable {
     vscode.window.showInformationMessage(`Granted editing access to ${this.clientUsername}.`);
   }
 
+  get hasClientConnected(): boolean {
+    return this.clientUsername !== "";
+  }
+
   get hasGrantedEditAccess(): boolean {
     return this._editAccessGranted;
   }

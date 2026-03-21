@@ -17,6 +17,7 @@ export interface FeatureCommand {
   description?: string;
   icon: string;
   roles: SessionRole[]; // Roles that can execute this command
+  isVisible?: () => boolean;
   execute: () => void | Promise<void>;
 }
 

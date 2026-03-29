@@ -50,11 +50,11 @@ export class HostRelayBridge {
 
   closeChannels(): void {
     if (this.mainSocket) {
-      try { this.mainSocket.close(); } catch { }
+      try { this.mainSocket.close(); } catch { /* ignore */ }
       this.mainSocket = null;
     }
     if (this.sharedbSocket) {
-      try { this.sharedbSocket.close(); } catch { }
+      try { this.sharedbSocket.close(); } catch { /* ignore */ }
       this.sharedbSocket = null;
     }
   }

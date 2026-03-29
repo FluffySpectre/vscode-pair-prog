@@ -93,7 +93,7 @@ export class HostSession implements vscode.Disposable {
     this.sharedbServer = new ShareDBServer(this.server);
 
     // Generate invite code and link
-    let inviteCode = encodeInviteCode(this.address, !!this.passphrase);
+    const inviteCode = encodeInviteCode(this.address, !!this.passphrase);
     this._inviteLink = `vscode://bjoernbosse.vscode-pair-prog/join?code=${inviteCode}`;
 
     this.statusBar.setHosting(this.address);

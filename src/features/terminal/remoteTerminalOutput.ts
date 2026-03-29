@@ -89,7 +89,7 @@ export class RemoteTerminalOutput implements vscode.Disposable {
   handleClear(): void {
     if (this.terminal) {
       this.writeEmitter.fire(
-        "\r\n\--- Terminal sharing ended ---\r\n"
+        "\r\n--- Terminal sharing ended ---\r\n"
       );
     }
     this.activeTerminalName = "";

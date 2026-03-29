@@ -130,7 +130,9 @@
     "compile": "node esbuild.mjs --production",
     "watch": "node esbuild.mjs --watch",
     "check": "tsc -p ./ --noEmit",
-    "lint": "eslint src --ext ts",
+    "lint": "npm run lint:extension && npm run lint:server",
+    "lint:extension": "eslint src",
+    "lint:server": "eslint server/src",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -143,12 +145,16 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
     "@types/node": "^24.1.0",
     "@types/sharedb": "^5.1.0",
     "@types/vscode": "^1.109.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.27.3",
+    "eslint": "^9.38.0",
+    "globals": "^16.4.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1",
     "vitest": "^4.1.0"
   }
 }

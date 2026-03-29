@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as os from "os";
 import * as path from "path";
 
 const SYNCABLE_SCHEMES = new Set(["file", "pairprog"]);
@@ -61,6 +62,5 @@ export function isSafeRelativePath(relativePath: string): boolean {
 }
 
 export function getSystemUsername(fallback: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return require("os").userInfo().username || fallback;
+  return os.userInfo().username || fallback;
 }

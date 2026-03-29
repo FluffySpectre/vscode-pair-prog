@@ -27,7 +27,6 @@ import { RelayConnector } from "../network/relayConnector";
 import { WS_DEFLATE_OPTIONS } from "../network/wsDefaults";
 import { type as otText } from "ot-text";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const ShareDBClient = require("sharedb/lib/client");
 ShareDBClient.types.register(otText);
 

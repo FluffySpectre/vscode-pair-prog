@@ -1,7 +1,7 @@
 // Protocol version
 // Increment whenever the message format changes in a backwards-incompatible way. 
 // Both sides reject a connection if the versions do not match exactly.
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 // Message Types
 
@@ -39,6 +39,12 @@ export enum MessageType {
   // Diagnostics
   DiagnosticsRequest = "diagnosticsRequest",
   DiagnosticsUpdate = "diagnosticsUpdate",
+
+  // Git status
+  GitStatusRequest = "gitStatusRequest",
+  GitStatusUpdate = "gitStatusUpdate",
+  GitOriginalContentRequest = "gitOriginalContentRequest",
+  GitOriginalContentResponse = "gitOriginalContentResponse",
 
   // IntelliSense proxy
   IntellisenseRequest = "intellisenseRequest",
@@ -238,6 +244,39 @@ export interface DiagnosticsUpdatePayload {
     filePath: string;
     diagnostics: SerializedDiagnostic[];
   }>;
+}
+
+// Git status payload types
+
+export type GitFileStatus =
+  | "modified"
+  | "added"
+  | "deleted"
+  | "renamed"
+  | "untracked"
+  | "conflict";
+
+export interface GitStatusRequestPayload {}
+
+export interface GitStatusFileEntry {
+  filePath: string;
+  status: GitFileStatus;
+  originalPath?: string;
+}
+
+export interface GitStatusUpdatePayload {
+  files: GitStatusFileEntry[];
+}
+
+export interface GitOriginalContentRequestPayload {
+  filePath: string;
+  originalPath: string;
+}
+
+export interface GitOriginalContentResponsePayload {
+  filePath: string;
+  originalPath: string;
+  content: string;
 }
 
 // IntelliSense proxy payload types

@@ -11,6 +11,7 @@ import { MessageRouter } from "./network/messageRouter";
 import { SessionManager } from "./session/sessionManager";
 import { registerCommands } from "./commands";
 import { registerUriHandler } from "./uriHandler";
+import { SessionDecorationProvider } from "./ui/sessionDecorationProvider";
 
 let sessionManager: SessionManager;
 let featureRegistry: FeatureRegistry;
@@ -20,8 +21,11 @@ export function activate(context: vscode.ExtensionContext) {
   console.log("[PairProg] Extension activated");
 
   const vfsProvider = new PairProgFileSystemProvider();
+  const decorationProvider = new SessionDecorationProvider();
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider(PairProgFileSystemProvider.SCHEME, vfsProvider, { isCaseSensitive: true })
+    vscode.workspace.registerFileSystemProvider(PairProgFileSystemProvider.SCHEME, vfsProvider, { isCaseSensitive: true }),
+    vscode.window.registerFileDecorationProvider(decorationProvider),
+    decorationProvider,
   );
 
   statusBar = new StatusBar();
@@ -33,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
   featureRegistry.register(new ChatFeature());
   featureRegistry.register(new TerminalFeature());
 
-  sessionManager = new SessionManager(statusBar, context, vfsProvider, featureRegistry, messageRouter);
+  sessionManager = new SessionManager(statusBar, context, vfsProvider, decorationProvider, featureRegistry, messageRouter);
 
   registerUriHandler(context, sessionManager);
   registerCommands(context, sessionManager, featureRegistry);

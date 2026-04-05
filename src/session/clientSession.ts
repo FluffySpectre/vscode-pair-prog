@@ -18,6 +18,7 @@ import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { DiagnosticsSync } from "../sync/diagnosticsSync";
 import { IntellisenseSync } from "../sync/intellisenseSync";
+import { GitStatusSync } from "../sync/gitStatusSync";
 import { StatusBar } from "../ui/statusBar";
 import { getSystemUsername, toAbsoluteUri } from "../utils/pathUtils";
 import { PairProgFileSystemProvider } from "../vfs/pairProgFileSystemProvider";
@@ -26,6 +27,7 @@ import { MessageRouter } from "../network/messageRouter";
 import { RelayConnector } from "../network/relayConnector";
 import { WS_DEFLATE_OPTIONS } from "../network/wsDefaults";
 import { type as otText } from "ot-text";
+import { SessionDecorationProvider } from "../ui/sessionDecorationProvider";
 
 const ShareDBClient = require("sharedb/lib/client");
 ShareDBClient.types.register(otText);
@@ -47,7 +49,9 @@ export class ClientSession implements vscode.Disposable {
   private fileOpsSync: FileOpsSync | null = null;
   private diagnosticsSync: DiagnosticsSync | null = null;
   private intellisenseSync: IntellisenseSync | null = null;
+  private gitStatusSync: GitStatusSync | null = null;
   private statusBar: StatusBar;
+  private decorationProvider: SessionDecorationProvider;
   private featureRegistry: FeatureRegistry;
   private messageRouter: MessageRouter;
 
@@ -61,10 +65,18 @@ export class ClientSession implements vscode.Disposable {
   private vfsProvider: PairProgFileSystemProvider;
   private relay?: { baseUrl: string; code: string };
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, vfsProvider: PairProgFileSystemProvider, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
+  constructor(
+    statusBar: StatusBar,
+    context: vscode.ExtensionContext,
+    vfsProvider: PairProgFileSystemProvider,
+    decorationProvider: SessionDecorationProvider,
+    featureRegistry: FeatureRegistry,
+    messageRouter: MessageRouter,
+  ) {
     this.statusBar = statusBar;
     this._context = context;
     this.vfsProvider = vfsProvider;
+    this.decorationProvider = decorationProvider;
     this.featureRegistry = featureRegistry;
     this.messageRouter = messageRouter;
     this.client = new PairProgClient();
@@ -222,6 +234,8 @@ export class ClientSession implements vscode.Disposable {
 
     this.cursorSync!.sendCurrentCursor();
 
+    this.gitStatusSync!.requestFullSync();
+
     // Open the files that the host currently has open
     await this.openHostFiles();
 
@@ -291,7 +305,7 @@ export class ClientSession implements vscode.Disposable {
     this.documentSync = new DocumentSync(sendFn, false, this.vfsProvider);
     this.documentSync.activate();
 
-    this.cursorSync = new CursorSync(sendFn, this.username, color);
+    this.cursorSync = new CursorSync(sendFn, this.username, color, this.decorationProvider);
     this.cursorSync.activate();
     this.cursorSync.onDidChangeFollowMode((following) => {
       this.statusBar.setFollowing(following);
@@ -306,11 +320,15 @@ export class ClientSession implements vscode.Disposable {
     this.intellisenseSync = new IntellisenseSync(sendFn, false);
     this.intellisenseSync.activate();
 
+    this.gitStatusSync = new GitStatusSync(sendFn, false, undefined, [], this.decorationProvider);
+    await this.gitStatusSync.activate();
+
     this.messageRouter.register(this.cursorSync);
     this.messageRouter.register(this.documentSync);
     this.messageRouter.register(this.fileOpsSync);
     this.messageRouter.register(this.diagnosticsSync);
     this.messageRouter.register(this.intellisenseSync);
+    this.messageRouter.register(this.gitStatusSync);
 
     await this.featureRegistry.activateAll({
       sendFn,
@@ -329,6 +347,7 @@ export class ClientSession implements vscode.Disposable {
     if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
     if (this.diagnosticsSync) { this.messageRouter.unregister(this.diagnosticsSync); }
     if (this.intellisenseSync) { this.messageRouter.unregister(this.intellisenseSync); }
+    if (this.gitStatusSync) { this.messageRouter.unregister(this.gitStatusSync); }
 
     this.documentSync?.dispose();
     this.documentSync = null;
@@ -356,6 +375,9 @@ export class ClientSession implements vscode.Disposable {
 
     this.intellisenseSync?.dispose();
     this.intellisenseSync = null;
+
+    this.gitStatusSync?.dispose();
+    this.gitStatusSync = null;
 
     this.featureRegistry.deactivateAll();
   }

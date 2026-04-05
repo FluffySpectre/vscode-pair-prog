@@ -8,12 +8,13 @@ import {
   createMessage,
 } from "../network/protocol";
 import { toRelativePath, toAbsoluteUri, isSyncableDocument } from "../utils/pathUtils";
+import { SessionDecorationProvider } from "../ui/sessionDecorationProvider";
 
 /**
  * CursorSync broadcasts local cursor/selection changes and renders
  * remote partner cursors as decorations in the editor.
  */
-export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvider, MessageHandler {
+export class CursorSync implements vscode.Disposable, MessageHandler {
   readonly messageTypes = [MessageType.CursorUpdate, MessageType.FollowUpdate];
   private disposables: vscode.Disposable[] = [];
   private sendFn: (msg: Message) => void;
@@ -43,13 +44,11 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
   private readonly _onDidChangeFollowMode = new vscode.EventEmitter<boolean>();
   readonly onDidChangeFollowMode = this._onDidChangeFollowMode.event;
 
-  private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<vscode.Uri | vscode.Uri[]>();
-  readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
-
   constructor(
     sendFn: (msg: Message) => void,
     username: string,
-    highlightColor: string
+    highlightColor: string,
+    private readonly decorationProvider?: SessionDecorationProvider,
   ) {
     this.sendFn = sendFn;
     this.username = username;
@@ -107,41 +106,6 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
         this.applyRemoteDecorations();
       })
     );
-
-    // Register file decoration provider for tab badges
-    this.disposables.push(
-      vscode.window.registerFileDecorationProvider(this)
-    );
-  }
-
-  // FileDecorationProvider
-
-  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
-    const uriStr = uri.toString();
-    const name = this.remoteCursors?.username ?? this.remoteUsername ?? "Remote";
-
-    if (this.remoteIsFollowing && this.localFileUri && uriStr === this.localFileUri.toString()) {
-      return {
-        badge: "👀",
-        tooltip: `${name} is following you`,
-      };
-    }
-
-    // Remote user badge: show on the file the remote user is currently editing
-    if (this.remoteFileUri && uriStr === this.remoteFileUri.toString() && this.remoteCursors) {
-      if (this.following) {
-        return {
-          badge: "👀",
-          tooltip: `Following ${name}`,
-        };
-      }
-      return {
-        badge: "👤",
-        tooltip: `${name} is editing this file`,
-      };
-    }
-
-    return undefined;
   }
 
   // Local Selection Changes
@@ -273,38 +237,25 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
       username: this.username,
     };
     this.sendFn(createMessage(MessageType.FollowUpdate, payload));
-
-    // Refresh tab badges: remote file (follower side) + local file (followed side)
-    const toRefresh: vscode.Uri[] = [];
-    if (this.remoteFileUri) { toRefresh.push(this.remoteFileUri); }
-    if (this.localFileUri) { toRefresh.push(this.localFileUri); }
-    if (toRefresh.length > 0) {
-      this._onDidChangeFileDecorations.fire(toRefresh);
-    }
+    this.publishDecorationState();
   }
 
   handleRemoteFollowUpdate(payload: FollowUpdatePayload): void {
     this.remoteIsFollowing = payload.following;
-
-    // Refresh our own active file's badge to show/hide the "being followed" 👁
-    if (this.localFileUri) {
-      this._onDidChangeFileDecorations.fire([this.localFileUri]);
-    }
+    this.publishDecorationState();
   }
 
   private updateLocalFileUri(uri: vscode.Uri): void {
     const prev = this.localFileUri;
     this.localFileUri = uri;
 
-    if (!this.remoteIsFollowing) { return; }
-
-    // Fire refresh on old and new file so badge moves with us
-    const toRefresh: vscode.Uri[] = [];
-    if (prev && prev.toString() !== uri.toString()) {
-      toRefresh.push(prev);
+    if (!this.remoteIsFollowing) {
+      return;
     }
-    toRefresh.push(uri);
-    this._onDidChangeFileDecorations.fire(toRefresh);
+
+    if (!prev || prev.toString() !== uri.toString()) {
+      this.publishDecorationState();
+    }
   }
 
   private async followRemoteCursor(payload: CursorUpdatePayload): Promise<void> {
@@ -339,17 +290,8 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
 
   private updateFileTabDecoration(relativePath: string): void {
     const newUri = toAbsoluteUri(relativePath);
-    const urisToRefresh: vscode.Uri[] = [];
-
-    // Clear decoration from the old file so the badge is removed
-    if (this.remoteFileUri && this.remoteFileUri.toString() !== newUri.toString()) {
-      urisToRefresh.push(this.remoteFileUri);
-    }
-
     this.remoteFileUri = newUri;
-    urisToRefresh.push(newUri);
-
-    this._onDidChangeFileDecorations.fire(urisToRefresh);
+    this.publishDecorationState();
   }
 
   // Render Decorations
@@ -438,20 +380,12 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     // Disable follow mode
     this.setFollowing(false);
 
-    // Clear tab decorations for remote file and our own file
-    const urisToRefresh: vscode.Uri[] = [];
-    if (this.remoteFileUri) { urisToRefresh.push(this.remoteFileUri); }
-    if (this.localFileUri) { urisToRefresh.push(this.localFileUri); }
-
     this.remoteCursors = null;
     this.remoteFileUri = null;
     this.localFileUri = null;
     this.remoteUsername = null;
     this.remoteIsFollowing = false;
-
-    if (urisToRefresh.length > 0) {
-      this._onDidChangeFileDecorations.fire(urisToRefresh);
-    }
+    this.publishDecorationState();
 
     for (const ed of vscode.window.visibleTextEditors) {
       ed.setDecorations(this.cursorDecorationType, []);
@@ -477,8 +411,17 @@ export class CursorSync implements vscode.Disposable, vscode.FileDecorationProvi
     this.selectionDecorationType.dispose();
     this.usernameLabelDecorationType.dispose();
     this._onDidChangeFollowMode.dispose();
-    this._onDidChangeFileDecorations.dispose();
     this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
+  }
+
+  private publishDecorationState(): void {
+    this.decorationProvider?.setCursorState({
+      following: this.following,
+      remoteIsFollowing: this.remoteIsFollowing,
+      remoteUsername: this.remoteCursors?.username ?? this.remoteUsername,
+      remoteFileUri: this.remoteFileUri,
+      localFileUri: this.localFileUri,
+    });
   }
 }

@@ -7,6 +7,7 @@ import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
 import { BeaconListener, DiscoveredSession } from "../network/beacon";
 import { RelayConnector, RelaySessionInfo } from "../network/relayConnector";
+import { SessionDecorationProvider } from "../ui/sessionDecorationProvider";
 
 const VFS_SCHEME = "pairprog";
 
@@ -21,6 +22,7 @@ export class SessionManager {
     private readonly statusBar: StatusBar,
     private readonly context: vscode.ExtensionContext,
     private readonly vfsProvider: PairProgFileSystemProvider,
+    private readonly decorationProvider: SessionDecorationProvider,
     private readonly featureRegistry: FeatureRegistry,
     private readonly messageRouter: MessageRouter,
   ) {}
@@ -73,7 +75,7 @@ export class SessionManager {
 
     try {
       this.hostSession = new HostSession(
-        this.statusBar, this.context, this.featureRegistry, this.messageRouter
+        this.statusBar, this.context, this.decorationProvider, this.featureRegistry, this.messageRouter
       );
       await this.hostSession.start();
     } catch (err: any) {
@@ -265,7 +267,7 @@ export class SessionManager {
   async connectToSession(address: string, passphrase?: string, relay?: { baseUrl: string; code: string }): Promise<void> {
     try {
       this.clientSession = new ClientSession(
-        this.statusBar, this.context, this.vfsProvider, this.featureRegistry, this.messageRouter
+        this.statusBar, this.context, this.vfsProvider, this.decorationProvider, this.featureRegistry, this.messageRouter
       );
       await this.clientSession.connect(address, passphrase, relay);
     } catch (err: any) {
@@ -330,7 +332,7 @@ export class SessionManager {
       const passphrase = await this.context.secrets.get("pairprog.reconnectPassphrase");
       await this.context.secrets.delete("pairprog.reconnectPassphrase");
       this.clientSession = new ClientSession(
-        this.statusBar, this.context, this.vfsProvider, this.featureRegistry, this.messageRouter
+        this.statusBar, this.context, this.vfsProvider, this.decorationProvider, this.featureRegistry, this.messageRouter
       );
       await this.clientSession.connect(address, passphrase, relay);
     } catch (err: any) {

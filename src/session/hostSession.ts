@@ -20,12 +20,14 @@ import { CursorSync } from "../sync/cursorSync";
 import { FileOpsSync } from "../sync/fileOpsSync";
 import { DiagnosticsSync } from "../sync/diagnosticsSync";
 import { IntellisenseSync } from "../sync/intellisenseSync";
+import { GitStatusSync } from "../sync/gitStatusSync";
 import { StatusBar } from "../ui/statusBar";
 import { toRelativePath, toAbsoluteUri, getSystemUsername, isSafeRelativePath } from "../utils/pathUtils";
 import { FeatureRegistry } from "../features";
 import { MessageRouter } from "../network/messageRouter";
 import { encodeInviteCode, encodeRelayInviteCode } from "../network/inviteCode";
 import { HostRelayBridge } from "../network/hostRelayBridge";
+import { SessionDecorationProvider } from "../ui/sessionDecorationProvider";
 
 /**
  * HostSession manages the entire host-side lifecycle:
@@ -43,7 +45,9 @@ export class HostSession implements vscode.Disposable {
   private fileOpsSync: FileOpsSync | null = null;
   private diagnosticsSync: DiagnosticsSync | null = null;
   private intellisenseSync: IntellisenseSync | null = null;
+  private gitStatusSync: GitStatusSync | null = null;
   private statusBar: StatusBar;
+  private decorationProvider: SessionDecorationProvider;
   private featureRegistry: FeatureRegistry;
   private messageRouter: MessageRouter;
 
@@ -62,9 +66,16 @@ export class HostSession implements vscode.Disposable {
   // Relay
   private relayBridge: HostRelayBridge | null = null;
 
-  constructor(statusBar: StatusBar, context: vscode.ExtensionContext, featureRegistry: FeatureRegistry, messageRouter: MessageRouter) {
+  constructor(
+    statusBar: StatusBar,
+    context: vscode.ExtensionContext,
+    decorationProvider: SessionDecorationProvider,
+    featureRegistry: FeatureRegistry,
+    messageRouter: MessageRouter,
+  ) {
     this.statusBar = statusBar;
     this._context = context;
+    this.decorationProvider = decorationProvider;
     this.featureRegistry = featureRegistry;
     this.messageRouter = messageRouter;
     this.server = new PairProgServer();
@@ -336,7 +347,7 @@ export class HostSession implements vscode.Disposable {
     this.documentSync = new DocumentSync(sendFn, true);
     this.documentSync.activate();
 
-    this.cursorSync = new CursorSync(sendFn, this.username, color);
+    this.cursorSync = new CursorSync(sendFn, this.username, color, this.decorationProvider);
     this.cursorSync.activate();
     this.cursorSync.onDidChangeFollowMode((following) => {
       this.statusBar.setFollowing(following);
@@ -351,11 +362,15 @@ export class HostSession implements vscode.Disposable {
     this.intellisenseSync = new IntellisenseSync(sendFn, true);
     this.intellisenseSync.activate();
 
+    this.gitStatusSync = new GitStatusSync(sendFn, true, wsFolder.uri, ignored);
+    await this.gitStatusSync.activate();
+
     this.messageRouter.register(this.cursorSync);
     this.messageRouter.register(this.documentSync);
     this.messageRouter.register(this.fileOpsSync);
     this.messageRouter.register(this.diagnosticsSync);
     this.messageRouter.register(this.intellisenseSync);
+    this.messageRouter.register(this.gitStatusSync);
 
     await this.featureRegistry.activateAll({
       sendFn,
@@ -372,6 +387,7 @@ export class HostSession implements vscode.Disposable {
     if (this.fileOpsSync) { this.messageRouter.unregister(this.fileOpsSync); }
     if (this.diagnosticsSync) { this.messageRouter.unregister(this.diagnosticsSync); }
     if (this.intellisenseSync) { this.messageRouter.unregister(this.intellisenseSync); }
+    if (this.gitStatusSync) { this.messageRouter.unregister(this.gitStatusSync); }
 
     this.documentSync?.dispose();
     this.documentSync = null;
@@ -390,6 +406,9 @@ export class HostSession implements vscode.Disposable {
 
     this.intellisenseSync?.dispose();
     this.intellisenseSync = null;
+
+    this.gitStatusSync?.dispose();
+    this.gitStatusSync = null;
 
     this.featureRegistry.deactivateAll();
   }

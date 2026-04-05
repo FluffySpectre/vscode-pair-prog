@@ -39,6 +39,22 @@ describe("protocol", () => {
       });
       expect(msg.payload).toEqual({ text: "hello", username: "alice" });
     });
+
+    it("supports git status payloads", () => {
+      const msg = createMessage(MessageType.GitStatusUpdate, {
+        files: [
+          { filePath: "src/index.ts", status: "modified" },
+          { filePath: "README.md", status: "untracked" },
+        ],
+      });
+
+      expect(msg.payload).toEqual({
+        files: [
+          { filePath: "src/index.ts", status: "modified" },
+          { filePath: "README.md", status: "untracked" },
+        ],
+      });
+    });
   });
 
   describe("serialize / deserialize round-trip", () => {

@@ -2,7 +2,9 @@ import * as vscode from "vscode";
 import * as os from "os";
 import { TerminalOutputPayload } from "../../network/protocol";
 
-// Manages the client-side terminal during a pair programming session
+/**
+ * Manages the client-side terminal during a pair programming session
+ */
 export class RemoteTerminalOutput implements vscode.Disposable {
   private static readonly TERMINAL_CWD_KEY = "pairprog.prevTerminalCwd";
   private static readonly TERMINAL_CWD_UNSET = "pairprog:unset";

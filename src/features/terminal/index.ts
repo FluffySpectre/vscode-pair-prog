@@ -81,8 +81,6 @@ export class TerminalFeature implements Feature {
     this.deactivate();
   }
 
-  // --- internal ---
-
   private async shareTerminal(): Promise<void> {
     if (!this.terminalSync) {
       vscode.window.showWarningMessage("No client connected yet.");

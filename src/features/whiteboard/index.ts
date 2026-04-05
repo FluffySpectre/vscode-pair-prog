@@ -29,8 +29,6 @@ export class WhiteboardFeature implements Feature {
 
   activate(context: FeatureContext): void {
     this.context = context;
-    // If the host reconnects and entities exist (panel may or may not be open),
-    // send a full sync so the newly-connected client gets the current board state.
     if (context.role === "host" && this.entities.size > 0) {
       const entities = Array.from(this.entities.values());
       context.sendFn(createMessage(MessageType.WhiteboardFullSync, { entities }));
@@ -110,8 +108,6 @@ export class WhiteboardFeature implements Feature {
     this.panel = undefined;
     this.context = undefined;
   }
-
-  // --- internal ---
 
   private ensurePanel(): void {
     if (!this.context) { return; }

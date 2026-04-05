@@ -401,7 +401,6 @@ function hitTest(px, py) {
 }
 
 function hitTestHandle(px, py, e) {
-  // px/py in world space; handle size and padding are in screen pixels → convert
   const pad = 4 / viewScale;
   const hs = HANDLE_SIZE / viewScale;
   const b = getEntityBounds(e);
@@ -592,7 +591,6 @@ canvas.addEventListener("pointerdown", e => {
     return;
   }
 
-  // Convert screen → world for all drawing/selection operations
   const { x: px, y: py } = screenToWorld(e.offsetX, e.offsetY);
   if (currentTool !== "text") {
     canvas.setPointerCapture(e.pointerId);
@@ -1070,8 +1068,8 @@ canvas.addEventListener("dblclick", e => {
 });
 
 // --- Zoom / pan (mouse wheel) ---
-// Ctrl+scroll (or trackpad pinch) → zoom centred on cursor
-// Plain scroll                    → pan (matches Figma / Excalidraw behaviour)
+// Ctrl+scroll (or trackpad pinch) -> zoom centred on cursor
+// Plain scroll                    -> pan (matches Figma / Excalidraw behaviour)
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {

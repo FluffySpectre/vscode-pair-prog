@@ -6,8 +6,6 @@ import { BeaconPayload, BEACON_PORT, BEACON_MAGIC } from "./protocol";
 const BROADCAST_INTERVAL_MS = 2000;
 const LISTEN_DURATION_MS = 2500;
 
-// BeaconBroadcaster
-
 export class BeaconBroadcaster extends EventEmitter {
   private socket: dgram.Socket | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -77,8 +75,6 @@ export class BeaconBroadcaster extends EventEmitter {
     }
   }
 }
-
-// BeaconListener
 
 export interface DiscoveredSession {
   name: string;

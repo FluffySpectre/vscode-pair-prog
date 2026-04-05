@@ -51,8 +51,6 @@ export class ChatFeature implements Feature {
     this.context = undefined;
   }
 
-  // --- internal ---
-
   private async sendMessage(): Promise<void> {
     if (!this.context) { return; }
 

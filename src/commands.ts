@@ -45,7 +45,6 @@ export function registerCommands(
     ),
   );
 
-  // Register feature-provided commands
   for (const cmd of featureRegistry.getCommands()) {
     context.subscriptions.push(
       vscode.commands.registerCommand(cmd.commandId, async () => {
@@ -58,7 +57,6 @@ export function registerCommands(
     );
   }
 
-  // Status bar click → quick-pick menu
   context.subscriptions.push(
     vscode.commands.registerCommand("pairprog.statusBarClicked", () =>
       showStatusBarMenu(sessionManager, featureRegistry)
